@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Sign in · jobkit</title>
+  <link rel="stylesheet" href="/vendor/mf-design.css" />
+  <link rel="stylesheet" href="/vendor/hub-shell.css" />
+  <link rel="stylesheet" href="/jobkit-tracker.css" />
+  <link rel="stylesheet" href="/setup.css" />
+  <script type="module" src="/jobkit-theme.js"></script>
+</head>
+<body class="mf-page hub-shell page--setup">
+  <div class="hub-backdrop" aria-hidden="true"><div class="hub-backdrop__blob hub-backdrop__blob--a"></div><div class="hub-backdrop__blob hub-backdrop__blob--b"></div><div class="hub-backdrop__blob hub-backdrop__blob--c"></div></div>
+  <header class="hub-header"><div class="hub-header__intro"><h1 class="hub-header__title">jobkit</h1><p class="hub-header__date">Sign in to your job search</p></div></header>
+  <main class="setup-main">
+    <form class="mf-card mf-glass setup-card login-card" id="login">
+      <h2>Sign in</h2>
+      <label class="mf-field"><span>Email</span><input id="email" type="email" autocomplete="username" required /></label>
+      <label class="mf-field"><span>Password</span><input id="password" type="password" autocomplete="current-password" required /></label>
+      <p class="mf-form-error" id="err" hidden></p>
+      <div class="setup-actions"><button class="mf-btn mf-btn--primary" type="submit">Sign in</button><span class="spacer"></span><a class="mf-link" href="/setup">Setup</a></div>
+    </form>
+  </main>
+  <script type="module">
+    const cfg = window.__JOBKIT_SUPABASE;
+    const { createBrowserClient } = await import("https://esm.sh/@supabase/ssr@0.6.1");
+    const sb = createBrowserClient(cfg.url, cfg.anonKey, { cookieOptions: { path: "/", sameSite: "lax", secure: location.protocol === "https:" } });
+    const next = new URLSearchParams(location.search).get("next");
+    const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+    document.getElementById("login").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("err"); err.hidden = true;
+      const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("email").value.trim(), password: document.getElementById("password").value });
+      if (error) { err.textContent = error.message; err.hidden = false; return; }
+      location.replace(safeNext);
+    });
+  </script>
+</body>
+</html>

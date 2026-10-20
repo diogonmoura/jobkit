@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jobkit",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-10-15",
+  "observability": {
+    "enabled": true,
+    "traces": { "enabled": true }
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // The Worker runs first so it can gate pages behind sign-in and redirect to /setup.
+    "run_worker_first": true
+  },
+  // Daily job scan (UTC). Uses the owner claimed in /setup.
+  "triggers": { "crons": ["0 7 * * *"] },
+  "vars": {
+    // Fill these in (the /setup wizard prints the exact values). The publishable key is safe to commit.
+    "SUPABASE_URL": "",
+    "SUPABASE_ANON_KEY": ""
+    // Optional: "SITE_ORIGIN": "https://jobs.example.com", "COOKIE_DOMAIN": ".example.com"
+  }
+  // Secrets (never in this file): npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+  //                               npx wrangler secret put SETTINGS_ENC_KEY
+  // Optional secrets: SETUP_TOKEN, SCAN_CRON_SECRET, OPENROUTER_API_KEY, ADZUNA_APP_ID, ADZUNA_APP_KEY
+}

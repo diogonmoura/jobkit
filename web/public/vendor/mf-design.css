@@ -1,0 +1,17 @@
+@import "./tokens.css";
+@import "./components.css";
+
+/* Legacy aliases for jobkit-cv-print.css (print bundle unchanged) */
+:root {
+  --bg: var(--mf-bg);
+  --bg-elevated: var(--mf-bg-elevated);
+  --text: var(--mf-text);
+  --text-muted: var(--mf-text-muted);
+  --border: var(--mf-border);
+  --accent: var(--mf-accent);
+  --accent-hover: var(--mf-accent-hover);
+  --danger: var(--mf-danger);
+  --shadow: var(--mf-shadow);
+  --radius: var(--mf-radius-md);
+  --font: var(--mf-font-sans);
+}

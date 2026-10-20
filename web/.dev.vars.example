@@ -1,0 +1,21 @@
+# Local development secrets for `npm run dev` (copy to .dev.vars; never commit real values).
+# The /setup wizard tests these and prints the exact lines for you.
+SUPABASE_URL=https://<project-ref>.supabase.co
+# Publishable (anon) key: safe in the browser, RLS protects rows.
+SUPABASE_ANON_KEY=
+# Secret (service role) key: Worker only, bypasses RLS. Never expose it to the browser.
+SUPABASE_SERVICE_ROLE_KEY=
+# 32 random bytes as 64 hex chars (openssl rand -hex 32). Encrypts the AI key saved in /setup.
+SETTINGS_ENC_KEY=
+# Optional: require this token to claim the first (owner) account in /setup.
+SETUP_TOKEN=
+# Optional: fallback LLM key for the Worker when none is saved in /setup.
+OPENROUTER_API_KEY=
+# Optional: pin the owner instead of using the account claimed in /setup.
+JOBKIT_OWNER_USER_ID=
+# Optional: protects POST /api/scan/cron (header X-Scan-Cron-Secret) for external schedulers.
+SCAN_CRON_SECRET=
+# Optional: Adzuna job search API (ADZUNA_COUNTRY: gb, us, de, …; default gb).
+ADZUNA_APP_ID=
+ADZUNA_APP_KEY=
+ADZUNA_COUNTRY=

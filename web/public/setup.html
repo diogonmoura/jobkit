@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Set up jobkit</title>
+  <link rel="stylesheet" href="/vendor/mf-design.css" />
+  <link rel="stylesheet" href="/vendor/hub-shell.css" />
+  <link rel="stylesheet" href="/jobkit-tracker.css" />
+  <link rel="stylesheet" href="/setup.css" />
+  <script type="module" src="/jobkit-theme.js"></script>
+</head>
+<body class="mf-page hub-shell page--setup">
+  <div class="hub-backdrop" aria-hidden="true">
+    <div class="hub-backdrop__blob hub-backdrop__blob--a"></div>
+    <div class="hub-backdrop__blob hub-backdrop__blob--b"></div>
+    <div class="hub-backdrop__blob hub-backdrop__blob--c"></div>
+  </div>
+
+  <header class="hub-header">
+    <div class="hub-header__intro">
+      <h1 class="hub-header__title">Set up jobkit</h1>
+      <p class="hub-header__date">Database, account, AI model and what you are looking for. About five minutes.</p>
+    </div>
+    <div class="hub-header__bar">
+      <nav class="hub-header__nav mf-cluster mf-glass">
+        <a class="mf-btn mf-btn--ghost" href="/" id="open-app" hidden>Open jobkit</a>
+        <button type="button" class="mf-btn mf-btn--ghost" data-theme-toggle aria-label="Toggle theme">Theme</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="setup-main">
+    <ol class="setup-steps mf-cluster mf-glass" id="steps" aria-label="Setup steps">
+      <li><button type="button" class="mf-btn" data-step="db"><span class="step-n">1</span><span class="step-label">Database</span></button></li>
+      <li><button type="button" class="mf-btn" data-step="account"><span class="step-n">2</span><span class="step-label">Account</span></button></li>
+      <li><button type="button" class="mf-btn" data-step="llm"><span class="step-n">3</span><span class="step-label">AI model</span></button></li>
+      <li><button type="button" class="mf-btn" data-step="prefs"><span class="step-n">4</span><span class="step-label">Preferences</span></button></li>
+      <li><button type="button" class="mf-btn" data-step="done"><span class="step-n">5</span><span class="step-label">Finish</span></button></li>
+    </ol>
+
+    <!-- 1 · Database -->
+    <section class="mf-card mf-glass setup-card" data-panel="db" hidden>
+      <p class="mf-eyebrow">Step 1 of 5</p>
+      <h2>Connect Supabase</h2>
+      <p class="mf-muted">jobkit stores everything in your own Supabase project (the free tier is enough). The Worker reads three values from its configuration:</p>
+      <details class="how" open>
+        <summary>Where to find them</summary>
+        <ol>
+          <li>Create a project at <a class="mf-link" href="https://supabase.com/dashboard" target="_blank" rel="noopener">supabase.com/dashboard</a>.</li>
+          <li>Open <b>Project Settings → Data API</b> and copy the <b>Project URL</b> (<code>https://&lt;ref&gt;.supabase.co</code>).</li>
+          <li>Open <b>Project Settings → API Keys</b>. Copy the <b>publishable</b> key (<code>sb_publishable_…</code>, or the legacy <code>anon</code> key). It is safe in the browser: Row Level Security protects your rows.</li>
+          <li>On the same page copy the <b>secret</b> key (<code>sb_secret_…</code>, or the legacy <code>service_role</code> key). It bypasses Row Level Security, so it is stored only as a Worker secret and is <b>never sent to the browser</b>.</li>
+        </ol>
+      </details>
+
+      <div id="db-unconfigured" hidden>
+        <div class="setup-grid">
+          <label class="mf-field span-2"><span>Project URL</span><input id="sb-url" placeholder="https://abcdefghijklmnop.supabase.co" autocomplete="off" /></label>
+          <label class="mf-field span-2"><span>Publishable (anon) key</span><input id="sb-anon" placeholder="sb_publishable_…" autocomplete="off" /></label>
+          <label class="mf-field span-2"><span>Secret (service role) key</span><input id="sb-service" type="password" placeholder="sb_secret_…" autocomplete="off" />
+            <span class="hint">Only used for this test call; nothing is stored. You will add it as a Worker secret below.</span></label>
+        </div>
+        <div class="setup-actions"><button type="button" class="mf-btn mf-btn--primary" id="sb-test">Test connection</button><span class="status-line" id="sb-test-status"></span></div>
+      </div>
+
+      <ul class="checks" id="db-checks"></ul>
+
+      <div id="db-config" hidden>
+        <h3>Save the configuration</h3>
+        <p class="mf-muted">Local development: put this in <code>web/.dev.vars</code>, then restart <code>npm run dev</code>.</p>
+        <div class="codebox"><pre id="cfg-devvars"></pre><button type="button" class="mf-btn mf-btn--ghost" data-copy="cfg-devvars">Copy</button></div>
+        <p class="mf-muted">Cloudflare: set the public values in <code>wrangler.jsonc</code> <code>vars</code> and the secrets with Wrangler, then <code>npm run deploy</code>.</p>
+        <div class="codebox"><pre id="cfg-wrangler"></pre><button type="button" class="mf-btn mf-btn--ghost" data-copy="cfg-wrangler">Copy</button></div>
+        <p class="hint">SETTINGS_ENC_KEY was generated in your browser just now. It encrypts the AI key you save in step 3; keep it safe and do not change it later.</p>
+      </div>
+
+      <div id="db-schema" hidden>
+        <h3>Create the tables</h3>
+        <p class="mf-muted">Run the setup SQL once. It is idempotent, so running it again after an upgrade is safe.</p>
+        <ol class="mf-muted" style="margin:0;padding-left:1.2rem;line-height:1.6">
+          <li>Open the <a class="mf-link" id="sql-editor-link" href="https://supabase.com/dashboard" target="_blank" rel="noopener">SQL editor</a> for your project.</li>
+          <li>Paste the contents of <a class="mf-link" href="/setup/jobkit-schema.sql" download>jobkit-schema.sql</a> (or click Copy SQL) and click <b>Run</b>.</li>
+          <li>Come back and click <b>Check again</b>.</li>
+        </ol>
+        <p class="hint">Prefer the CLI? <code>supabase link --project-ref &lt;ref&gt;</code> then <code>supabase db push</code> from <code>web/</code> applies the same migrations.</p>
+        <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" id="copy-sql">Copy SQL</button></div>
+      </div>
+
+      <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" id="db-recheck">Check again</button><span class="spacer"></span><button type="button" class="mf-btn mf-btn--primary" id="db-next" disabled>Continue</button></div>
+    </section>
+
+    <!-- 2 · Account -->
+    <section class="mf-card mf-glass setup-card" data-panel="account" hidden>
+      <p class="mf-eyebrow">Step 2 of 5</p>
+      <h2 id="acct-title">Create your account</h2>
+      <p class="mf-muted" id="acct-lede">jobkit is single-user. The first account created here becomes the owner; nobody else can open it.</p>
+      <div id="acct-form">
+        <div class="setup-grid">
+          <label class="mf-field span-2"><span>Email</span><input id="acct-email" type="email" autocomplete="username" /></label>
+          <label class="mf-field span-2"><span>Password</span><input id="acct-pass" type="password" autocomplete="new-password" minlength="8" /><span class="hint">At least 8 characters.</span></label>
+          <label class="mf-field span-2" id="acct-token-wrap" hidden><span>Setup token</span><input id="acct-token" autocomplete="off" /><span class="hint">This deployment sets SETUP_TOKEN; paste the same value.</span></label>
+        </div>
+        <div class="setup-actions"><button type="button" class="mf-btn mf-btn--primary" id="acct-create">Create account</button><button type="button" class="mf-btn mf-btn--ghost" id="acct-signin">I already have one: sign in</button><span class="status-line" id="acct-status"></span></div>
+      </div>
+      <div id="acct-done" hidden><ul class="checks"><li class="ok"><span>Signed in as <b id="acct-who"></b> (owner)</span></li></ul>
+        <p class="hint">Tip: in Supabase, <b>Authentication → Sign In / Providers</b>, turn off “Allow new users to sign up” now that you have your account. If email confirmation is on, confirm your address before signing in.</p></div>
+      <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" data-go="db">Back</button><span class="spacer"></span><button type="button" class="mf-btn mf-btn--primary" id="acct-next" disabled>Continue</button></div>
+    </section>
+
+    <!-- 3 · AI model -->
+    <section class="mf-card mf-glass setup-card" data-panel="llm" hidden>
+      <p class="mf-eyebrow">Step 3 of 5</p>
+      <h2>Connect an AI model</h2>
+      <p class="mf-muted">Scoring, CV tailoring and application answers use an LLM. The key is checked, encrypted with SETTINGS_ENC_KEY (AES-GCM) and stored in your database; only the Worker can decrypt it.</p>
+      <div class="radio-cards" id="llm-provider">
+        <label><input type="radio" name="prov" value="openrouter" checked /><b>OpenRouter</b><small>Recommended. One key, many models. Key at openrouter.ai/keys.</small></label>
+        <label><input type="radio" name="prov" value="openai" /><b>OpenAI</b><small>Key at platform.openai.com/api-keys.</small></label>
+        <label><input type="radio" name="prov" value="custom" /><b>Other</b><small>Any OpenAI-compatible API (Groq, Together, a local server…).</small></label>
+      </div>
+      <div class="setup-grid">
+        <label class="mf-field span-2" id="llm-base-wrap" hidden><span>API base URL</span><input id="llm-base" placeholder="https://api.example.com/v1" autocomplete="off" /></label>
+        <label class="mf-field"><span>Model (optional)</span><input id="llm-model" placeholder="google/gemini-2.5-flash" autocomplete="off" /><span class="hint">Leave empty for the default. Scoring uses a cheap model; CVs a stronger one.</span></label>
+        <label class="mf-field"><span>API key</span><input id="llm-key" type="password" autocomplete="off" placeholder="sk-or-…" /><span class="hint" id="llm-key-hint"></span></label>
+      </div>
+      <div class="setup-actions"><button type="button" class="mf-btn mf-btn--primary" id="llm-save">Test &amp; save</button><span class="status-line" id="llm-status"></span></div>
+      <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" data-go="account">Back</button><span class="spacer"></span><button type="button" class="mf-btn mf-btn--primary" id="llm-next" disabled>Continue</button></div>
+    </section>
+
+    <!-- 4 · Preferences -->
+    <section class="mf-card mf-glass setup-card" data-panel="prefs" hidden>
+      <p class="mf-eyebrow">Step 4 of 5</p>
+      <h2>What are you looking for?</h2>
+      <p class="mf-muted">This becomes your scoring rubric and filters. You can refine it later in Preferences, and 👍/👎 feedback tunes it over time.</p>
+
+      <h3>Target roles</h3>
+      <p class="hint">Group job titles by fit. Tier 1 scores highest. One title per line or comma-separated.</p>
+      <div class="setup-grid">
+        <label class="mf-field"><span>Tier 1 · ideal</span><textarea id="p-t1" placeholder="Staff Engineer&#10;Principal Engineer"></textarea></label>
+        <label class="mf-field"><span>Tier 2 · strong</span><textarea id="p-t2" placeholder="Senior Backend Engineer"></textarea></label>
+        <label class="mf-field"><span>Tier 3 · fine</span><textarea id="p-t3" placeholder="Engineering Manager"></textarea></label>
+        <label class="mf-field"><span>Tier 4 · stretch</span><textarea id="p-t4" placeholder="Solutions Architect"></textarea></label>
+        <label class="mf-field"><span>Seniority</span><input id="p-seniority" placeholder="senior, staff, lead" /></label>
+        <label class="mf-field"><span>Industries (optional)</span><input id="p-industries" placeholder="fintech, developer tools" /></label>
+        <label class="mf-field span-2"><span>What should the work centre on?</span><input id="p-focus" placeholder="e.g. distributed systems and platform APIs" /><span class="hint">Scored as “focus”: how central this is to the role.</span></label>
+        <label class="mf-field"><span>Keywords to look for</span><input id="p-keywords" placeholder="TypeScript, Go, Kubernetes" /></label>
+        <label class="mf-field"><span>Keywords to drop</span><input id="p-kw-exclude" placeholder="sales, intern, unpaid" /></label>
+      </div>
+
+      <h3>Location</h3>
+      <div class="setup-grid">
+        <label class="mf-field"><span>City</span><input id="p-city" placeholder="e.g. Porto" /></label>
+        <label class="mf-field"><span>Country</span><input id="p-country" placeholder="e.g. Portugal" /></label>
+        <label class="mf-field"><span>Region (optional)</span><input id="p-region" placeholder="e.g. EU / EMEA" /><span class="hint">Remote roles open to this region count as eligible.</span></label>
+        <label class="mf-field"><span>Other acceptable locations</span><input id="p-locations" placeholder="e.g. Madrid, Berlin" /></label>
+        <label class="mf-field span-2"><span>Right to work</span><input id="p-auth" placeholder="e.g. EU citizen, no sponsorship needed" /></label>
+      </div>
+      <div class="radio-cards" id="p-remote">
+        <label><input type="radio" name="remote" value="remote_only" checked /><b>Remote only</b><small>Fully remote roles you can do from home.</small></label>
+        <label><input type="radio" name="remote" value="remote_or_hybrid" /><b>Remote or hybrid</b><small>Hybrid is fine near your city or other locations.</small></label>
+        <label><input type="radio" name="remote" value="any" /><b>Anywhere</b><small>No location filter; still scored.</small></label>
+      </div>
+
+      <h3>Companies to avoid</h3>
+      <div id="p-avoid">
+        <div class="choice-row"><span>Consultancies (Big Four, strategy and IT consulting)</span><span class="seg" data-type="consultancies"><button type="button" data-v="exclude">Exclude</button><button type="button" data-v="flag" class="on">Flag</button><button type="button" data-v="">Allow</button></span></div>
+        <div class="choice-row"><span>IT services and outsourcing</span><span class="seg" data-type="it_services"><button type="button" data-v="exclude">Exclude</button><button type="button" data-v="flag" class="on">Flag</button><button type="button" data-v="">Allow</button></span></div>
+        <div class="choice-row"><span>Recruitment and staffing agencies</span><span class="seg" data-type="agencies"><button type="button" data-v="exclude" class="on">Exclude</button><button type="button" data-v="flag">Flag</button><button type="button" data-v="">Allow</button></span></div>
+      </div>
+      <label class="mf-field"><span>Specific companies to exclude (optional)</span><input id="p-exclude-co" placeholder="names, comma-separated" /></label>
+
+      <h3>Pay and other characteristics</h3>
+      <div class="setup-grid">
+        <label class="mf-field"><span>Minimum base salary per year</span><input id="p-salary" type="number" min="0" step="1000" placeholder="0 = no floor" /></label>
+        <label class="mf-field"><span>Currency</span><select id="p-currency"><option>EUR</option><option>USD</option><option>GBP</option><option>CHF</option><option>CAD</option><option>AUD</option></select></label>
+        <label class="mf-field span-2"><span>Anything else that matters</span><textarea id="p-notes" placeholder="e.g. small product teams, async culture, no on-call, mission I care about"></textarea></label>
+      </div>
+
+      <details class="how">
+        <summary>Scoring rubric (advanced)</summary>
+        <p class="hint" style="margin-top:.5rem">How much each part counts out of 100. Jobs under the minimum score are hidden.</p>
+        <div class="rubric" id="p-rubric">
+          <label><span>Role tier</span><input type="range" min="0" max="50" value="30" data-k="tier" /><output>30</output></label>
+          <label><span>Remote fit</span><input type="range" min="0" max="50" value="20" data-k="remote" /><output>20</output></label>
+          <label><span>Focus</span><input type="range" min="0" max="50" value="20" data-k="focus" /><output>20</output></label>
+          <label><span>Seniority &amp; scope</span><input type="range" min="0" max="50" value="15" data-k="seniority" /><output>15</output></label>
+          <label><span>Company type</span><input type="range" min="0" max="50" value="15" data-k="company" /><output>15</output></label>
+          <label><span>Minimum score</span><input type="range" min="0" max="90" value="50" id="p-minscore" /><output>50</output></label>
+        </div>
+      </details>
+
+      <h3>Companies to watch</h3>
+      <p class="hint">Company names or job-board links (Ashby, Greenhouse, Lever, Workable, Remote.com). jobkit finds their public boards and scans them daily. Up to 12 at a time.</p>
+      <label class="mf-field"><span>Companies</span><textarea id="p-companies" placeholder="Acme&#10;https://jobs.ashbyhq.com/example"></textarea></label>
+      <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" id="p-find">Find job boards</button><span class="status-line" id="p-find-status"></span></div>
+      <ul class="boards" id="p-boards"></ul>
+
+      <h3>Your CV and experience (optional)</h3>
+      <p class="hint">Text is extracted in your browser; the original file is not stored. The Master CV is the source of truth for tailored CVs; experience notes add detail.</p>
+      <div class="setup-grid">
+        <label class="mf-field"><span>Master CV (.md, .txt, .pdf, .docx)</span><input type="file" id="p-cv" accept=".md,.markdown,.txt,.pdf,.docx" /></label>
+        <label class="mf-field"><span>Experience notes (several files)</span><input type="file" id="p-exp" multiple accept=".md,.markdown,.txt,.pdf,.docx" /></label>
+      </div>
+
+      <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" data-go="llm">Back</button><span class="status-line" id="p-status"></span><span class="spacer"></span><button type="button" class="mf-btn mf-btn--primary" id="p-save">Save &amp; continue</button></div>
+    </section>
+
+    <!-- 5 · Finish -->
+    <section class="mf-card mf-glass setup-card" data-panel="done" hidden>
+      <p class="mf-eyebrow">Step 5 of 5</p>
+      <div class="done-hero">
+        <div class="big" aria-hidden="true">✓</div>
+        <h2>You are set up</h2>
+        <p class="mf-muted" id="done-summary"></p>
+      </div>
+      <ul class="checks" id="done-checks"></ul>
+      <p class="hint">The daily scan runs from the Worker cron (07:00 UTC by default, see <code>wrangler.jsonc</code>). Click <b>Scan now</b> on the Jobs tab any time. Come back to <code>/setup</code> to change any of this.</p>
+      <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" data-go="prefs">Back</button><span class="spacer"></span><button type="button" class="mf-btn mf-btn--primary" id="finish">Open jobkit</button></div>
+    </section>
+  </main>
+  <div id="toast" class="tracker-toast mf-glass" hidden role="status"></div>
+  <script type="module" src="/setup.js"></script>
+</body>
+</html>

@@ -32,10 +32,16 @@ class TestPluginFiles(unittest.TestCase):
                 self.assertIn("~/.jobkit/launcher.py", text, name)
 
     def test_tracker_page_has_no_personal_data(self):
-        with open(os.path.join(ROOT, "artifact", "tracker.html"), encoding="utf-8") as handle:
-            text = handle.read()
-        for needle in ("Diogo", "Moura", "diogomoura", "Mercedes"):
-            self.assertNotIn(needle, text)
+        pages = ["artifact/tracker.html"]
+        pages += [os.path.join("web", "public", n) for n in ("index.html", "setup.html", "login.html")]
+        for rel in pages:
+            path = os.path.join(ROOT, rel)
+            if not os.path.exists(path):
+                continue
+            with open(path, encoding="utf-8") as handle:
+                text = handle.read()
+            for needle in ("Diogo", "Moura", "diogomoura", "Mercedes", "Miguel", "Frasco"):
+                self.assertNotIn(needle, text, rel)
 
 
     def test_no_owner_personal_data_in_code_or_tests(self):
@@ -46,9 +52,9 @@ class TestPluginFiles(unittest.TestCase):
         # check for without committing them here.
         allowed = {"README.md", "LICENSE", "test_plugin_files.py"}
         extra = os.environ.get("JOBKIT_PRIVATE_NEEDLES", "")
-        needles = ["Diogo", "Moura"] + [n.strip() for n in extra.split(",") if n.strip()]
+        needles = ["Diogo", "Moura", "Miguel", "Frasco", "miguelfrasco"] + [n.strip() for n in extra.split(",") if n.strip()]
         for folder, _, files in os.walk(ROOT):
-            if any(part in folder for part in (".git", ".claude-plugin", "docs", ".superpowers", "__pycache__")):
+            if any(part in folder for part in (".git", ".claude-plugin", "docs", ".superpowers", "__pycache__", "node_modules", ".wrangler")):
                 continue
             for name in files:
                 if name in allowed:

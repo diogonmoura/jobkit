@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 .superpowers/
+web/node_modules/
+web/.wrangler/
+web/.dev.vars
+web/dist/
+web/screenshots/

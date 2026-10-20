@@ -1,0 +1,125 @@
+:root {
+  color-scheme: light dark;
+
+  /* Typography — Apple-like system stack */
+  --mf-font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mf-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --mf-text-xs: 0.75rem;
+  --mf-text-sm: 0.875rem;
+  --mf-text-base: 1rem;
+  --mf-text-lg: 1.125rem;
+  --mf-text-xl: 1.375rem;
+  --mf-text-2xl: 1.75rem;
+  --mf-text-3xl: clamp(1.75rem, 4vw, 2.25rem);
+
+  --mf-weight-regular: 400;
+  --mf-weight-medium: 500;
+  --mf-weight-semibold: 600;
+  --mf-weight-bold: 700;
+
+  --mf-tracking-tight: -0.02em;
+  --mf-tracking-wide: 0.08em;
+
+  /* Spacing */
+  --mf-space-1: 0.25rem;
+  --mf-space-2: 0.5rem;
+  --mf-space-3: 0.75rem;
+  --mf-space-4: 1rem;
+  --mf-space-5: 1.25rem;
+  --mf-space-6: 1.5rem;
+  --mf-space-8: 2rem;
+  --mf-space-10: 2.5rem;
+  --mf-space-12: 3rem;
+
+  /* Radius */
+  --mf-radius-sm: 10px;
+  --mf-radius-md: 14px;
+  --mf-radius-lg: 20px;
+  --mf-radius-xl: 28px;
+  --mf-radius-full: 999px;
+
+  /* Motion */
+  --mf-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --mf-duration-fast: 120ms;
+  --mf-duration: 220ms;
+  --mf-duration-slow: 380ms;
+
+  /* Light theme */
+  --mf-bg: #f5f5f7;
+  --mf-bg-elevated: #ffffff;
+  --mf-bg-muted: #ebebef;
+  --mf-text: #1d1d1f;
+  --mf-text-muted: #6e6e73;
+  --mf-border: rgba(0, 0, 0, 0.08);
+  --mf-accent: #0071e3;
+  --mf-accent-hover: #0077ed;
+  --mf-danger: #ff3b30;
+  --mf-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --mf-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --mf-shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.12);
+  --mf-focus-ring: 0 0 0 3px color-mix(in srgb, var(--mf-accent) 35%, transparent);
+
+  /* Glass material (visionOS / macOS) */
+  --mf-glass-blur: 22px;
+  --mf-glass-saturate: 165%;
+  --mf-glass-fill: color-mix(in srgb, var(--mf-bg-elevated) 62%, transparent);
+  --mf-glass-fill-solid: var(--mf-bg-elevated);
+  --mf-glass-border: color-mix(in srgb, #ffffff 72%, var(--mf-border));
+  --mf-glass-highlight: color-mix(in srgb, #ffffff 55%, transparent);
+  --mf-glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.1), 0 1px 0 rgba(255, 255, 255, 0.35) inset;
+
+  /* Accent palette (bento tiles) */
+  --mf-accent-blue: #2e5bff;
+  --mf-accent-green: #2ecc71;
+  --mf-accent-sky: #3498db;
+  --mf-accent-purple: #9b59b6;
+  --mf-accent-charcoal: #1c222d;
+}
+
+html[data-theme="dark"] {
+  --mf-bg: #0b0e11;
+  --mf-bg-elevated: #141820;
+  --mf-bg-muted: #1c222d;
+  --mf-text: #f5f5f7;
+  --mf-text-muted: #a1a1a6;
+  --mf-border: rgba(255, 255, 255, 0.1);
+  --mf-accent: #0a84ff;
+  --mf-accent-hover: #409cff;
+  --mf-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --mf-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --mf-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --mf-glass-fill: color-mix(in srgb, var(--mf-bg-elevated) 48%, transparent);
+  --mf-glass-border: color-mix(in srgb, #ffffff 14%, var(--mf-border));
+  --mf-glass-highlight: color-mix(in srgb, #ffffff 12%, transparent);
+  --mf-glass-shadow: 0 16px 48px rgba(0, 0, 0, 0.42), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    --mf-bg: #0b0e11;
+    --mf-bg-elevated: #141820;
+    --mf-bg-muted: #1c222d;
+    --mf-text: #f5f5f7;
+    --mf-text-muted: #a1a1a6;
+    --mf-border: rgba(255, 255, 255, 0.1);
+    --mf-accent: #0a84ff;
+    --mf-accent-hover: #409cff;
+    --mf-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --mf-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    --mf-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+    --mf-glass-fill: color-mix(in srgb, var(--mf-bg-elevated) 48%, transparent);
+    --mf-glass-border: color-mix(in srgb, #ffffff 14%, var(--mf-border));
+    --mf-glass-highlight: color-mix(in srgb, #ffffff 12%, transparent);
+    --mf-glass-shadow: 0 16px 48px rgba(0, 0, 0, 0.42), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mf-duration-fast: 0ms;
+    --mf-duration: 0ms;
+    --mf-duration-slow: 0ms;
+  }
+}

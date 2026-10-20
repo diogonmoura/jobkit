@@ -33,6 +33,17 @@ the checks.
 | `/jobkit:build-connector` | Add support for a job board jobkit cannot read yet |
 | `/jobkit:sync-tracker` | Two-way sync with your tracker dashboard on claude.ai |
 
+## Hosted tracker (optional)
+
+[`web/`](web/README.md) is a self-hosted, single-user web app (Cloudflare
+Workers + your own Supabase project) for the same job search: a daily scan of
+the boards you watch (Ashby, Greenhouse, Lever, Workable, Remote.com) scored
+against your own rubric by an LLM, a tailored CV per posting with Word and PDF
+export, drafted application answers, and an application tracker. A first-run
+wizard at `/setup` connects the database and an AI model (OpenRouter by
+default) and turns your preferences into the profile, rubric and filters, so
+no personal data lives in the code. See [`web/README.md`](web/README.md).
+
 ## Commands
 
 Skills call these for you. Run them yourself as
