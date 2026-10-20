@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss xmlns:taleo="urn:TBERss" version="2.0">
+<channel>
+<title>PARFOIS Job Feed</title>
+<item>
+<title>Strategy &amp; Transformation Manager</title>
+<link>https://lde.tbe.taleo.net/lde02/ats/careers/requisition.jsp?org=BARHOLD&amp;cws=37&amp;rid=5211</link>
+<description>long text</description>
+<pubDate>Wed, 14 Oct 2026 10:09:47 GMT</pubDate>
+<taleo:reqId>5211</taleo:reqId>
+<taleo:location>Portugal - Headquarters - Oporto</taleo:location>
+<taleo:locationCountry>PT</taleo:locationCountry>
+</item>
+<item>
+<title>Sales Assistant Part time C.C. Gran Roma - Roma</title>
+<pubDate>not a date</pubDate>
+<taleo:reqId>5119</taleo:reqId>
+<taleo:location>Italy - Stores</taleo:location>
+</item>
+<item><title>No requisition id</title></item>
+</channel>
+</rss>

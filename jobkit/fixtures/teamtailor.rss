@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:tt="https://teamtailor.com/locations">
+  <channel>
+    <title>Coverflex</title>
+    <item>
+      <title>Head of AI Ops</title>
+      <pubDate>Mon, 05 Oct 2026 09:26:36 +0100</pubDate>
+      <link>https://careers.coverflex.com/jobs/8397576-head-of-ai-ops</link>
+      <remoteStatus>hybrid</remoteStatus>
+      <guid>ec0641ef-a077-4a2b-b134-a9b812b15fa3</guid>
+      <tt:locations>
+        <tt:location><tt:name>Porto HQ</tt:name><tt:city>Porto</tt:city><tt:country>Portugal</tt:country></tt:location>
+      </tt:locations>
+    </item>
+    <item>
+      <title>Cybersecurity Lead</title>
+      <link>https://careers.coverflex.com/jobs/8436969-cybersecurity-lead</link>
+      <remoteStatus>fully</remoteStatus>
+      <guid>9c4a055c-1b13-46cd-9e91-6b4ea7941a3b</guid>
+      <tt:locations></tt:locations>
+    </item>
+    <item><title>No guid</title></item>
+  </channel>
+</rss>

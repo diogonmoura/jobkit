@@ -1,0 +1,14 @@
+{
+  "name": "jobkit",
+  "description": "jobkit: CV tailoring and job search tracking for Claude Code",
+  "owner": {"name": "Diogo Moura"},
+  "plugins": [
+    {
+      "name": "jobkit",
+      "description": "Tailor your CV to job postings with ATS-safe PDFs, track applications, and get alerts for new roles at companies you follow.",
+      "version": "0.2.1",
+      "source": "./",
+      "author": {"name": "Diogo Moura"}
+    }
+  ]
+}
