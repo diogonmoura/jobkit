@@ -705,3 +705,4 @@ td.co .co-line{align-items:center}
 .job-card--filtered:hover,.job-card--filtered:focus-within{opacity:1}
 .job-chip--filtered{color:var(--mf-text);border-color:color-mix(in srgb,var(--mf-text) 25%,transparent);background:color-mix(in srgb,var(--mf-text) 6%,transparent)}
 #toggle-filtered[aria-pressed="true"]{background:color-mix(in srgb,var(--mf-accent) 12%,transparent)}
+[data-pills="pref-constraints"] .pill{border-radius:12px;padding:.35rem .35rem .35rem .7rem;line-height:1.45}
