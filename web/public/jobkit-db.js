@@ -224,7 +224,7 @@ export function createJobkitDb(supabase, userId) {
     },
   };
 
-  // Companies the daily scan watches (read-only here; edited in Setup).
+  // Companies the daily scan watches (added, paused, edited and removed from the Following tab).
   const scanTargets = {
     async list() {
       const { data, error } = await supabase
@@ -234,6 +234,20 @@ export function createJobkitDb(supabase, userId) {
         .order("company");
       if (error) throw error;
       return data ?? [];
+    },
+    async update(id, patch) {
+      const allowed = {};
+      for (const k of ["enabled", "company", "hq", "industry"]) if (k in patch) allowed[k] = patch[k];
+      const { error } = await supabase.from("jobkit_scan_targets").update(allowed).eq("user_id", userId).eq("id", id);
+      if (error) throw error;
+    },
+    async remove(id) {
+      const { error } = await supabase.from("jobkit_scan_targets").delete().eq("user_id", userId).eq("id", id);
+      if (error) throw error;
+    },
+    async restore(row) {
+      const { error } = await supabase.from("jobkit_scan_targets").upsert({ ...row, user_id: userId }, { onConflict: "user_id,id" });
+      if (error) throw error;
     },
   };
 

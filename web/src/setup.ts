@@ -143,7 +143,7 @@ export function parseBoardUrl(raw: string): { vendor: string; slug: string } | n
 }
 
 /** Ask a board how many open jobs it has; null when the board does not exist. */
-async function probe(vendor: string, slug: string): Promise<number | null> {
+export async function probe(vendor: string, slug: string): Promise<number | null> {
   const s = encodeURIComponent(slug);
   const urls: Record<string, string> = {
     ashby: `https://api.ashbyhq.com/posting-api/job-board/${s}`,
