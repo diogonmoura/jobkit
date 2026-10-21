@@ -120,6 +120,9 @@ function slugCandidates(name: string): string[] {
 
 export type BoardHit = { company: string; vendor: string; slug: string; jobs: number };
 
+/** Public RSS feed of a Teamtailor career site (slug = its host, e.g. careers.example.com). */
+export const teamtailorFeed = (host: string) => `https://${host.replace(/[^a-z0-9.-]/gi, "")}/jobs.rss`;
+
 /** Turn a board URL into vendor + slug. */
 export function parseBoardUrl(raw: string): { vendor: string; slug: string } | null {
   let u: URL;
@@ -139,6 +142,8 @@ export function parseBoardUrl(raw: string): { vendor: string; slug: string } | n
   if (host === "jobs.eu.lever.co" && first) return { vendor: "lever-eu", slug: first };
   if (host === "apply.workable.com" && first) return { vendor: "workable", slug: first };
   if (host === "apply.remote.com") return { vendor: "remote-com", slug: "remote" };
+  // Teamtailor career sites: <company>.teamtailor.com or a custom domain (detected from the page); slug = career-site host.
+  if (/\.teamtailor\.com$/.test(host)) return { vendor: "teamtailor", slug: host };
   return null;
 }
 
@@ -153,6 +158,16 @@ export async function probe(vendor: string, slug: string): Promise<number | null
     workable: `https://apply.workable.com/api/v1/widget/accounts/${s}`,
     "remote-com": "https://apply.remote.com/api/public/jobs",
   };
+  if (vendor === "teamtailor") {
+    try {
+      const r = await fetch(teamtailorFeed(slug), { headers: { "User-Agent": "Mozilla/5.0 (compatible; jobkit-setup/1)" } });
+      if (!r.ok) return null;
+      const xml = await r.text();
+      return /<rss[\s>]/.test(xml) ? (xml.match(/<item>/g) ?? []).length : null;
+    } catch {
+      return null;
+    }
+  }
   const url = urls[vendor];
   if (!url) return null;
   try {

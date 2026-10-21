@@ -7,7 +7,7 @@ import { completeChat, type ChatMessage } from "../llm";
 import { langName, tr } from "../i18n";
 import { refreshProfileFromFeedback, loadProfile, loadCandidateProfile, seedScanTargets, normalizeRubric } from "../preferences";
 import { dedupeOpenings, prefilterOpenings, companyExcluded, companyFlagged } from "./prefilter";
-import { fetchAllSources, fetchAshby, remoteComOpening, remoteComJson, type ScanTarget } from "./sources";
+import { fetchAllSources, fetchAshby, fetchTeamtailor, remoteComOpening, remoteComJson, type ScanTarget } from "./sources";
 import {
   estimateSalariesBatch,
   extractBenefits,
@@ -390,7 +390,11 @@ export async function runJobScan(
 }
 
 /** Resolve a posting URL (ATS link or a company careers page backed by Ashby) to one opening with full text. */
-async function resolvePosting(url: string, companyFor: (vendor: string, slug: string) => string): Promise<RawOpening> {
+async function resolvePosting(
+  url: string,
+  companyFor: (vendor: string, slug: string) => string,
+  teamtailorHosts: Set<string> = new Set(),
+): Promise<RawOpening> {
   const u = new URL(url);
   const parts = u.pathname.split("/").filter(Boolean);
   const host = u.hostname.toLowerCase();
@@ -417,6 +421,14 @@ async function resolvePosting(url: string, companyFor: (vendor: string, slug: st
     const o = job && remoteComOpening(job, companyFor("remote-com", "remote"));
     if (!o) throw new Error("Remote.com posting not found");
     return { ...o, source: "import" };
+  }
+  // Teamtailor career sites (<x>.teamtailor.com or a custom domain): /jobs/<numeric id>-<title>, read from the public RSS feed.
+  const tt = parts[0] === "jobs" ? parts[1]?.match(/^(\d+)(-|$)/) : null;
+  if (tt && (/\.teamtailor\.com$/.test(host) || teamtailorHosts.has(host))) {
+    const all = await fetchTeamtailor({ company: companyFor("teamtailor", host), vendor: "teamtailor", slug: host });
+    const hit = all.find((o) => o.externalKey.endsWith(":" + tt[1]));
+    if (!hit) throw new Error(`Posting not found on the Teamtailor site "${host}"`);
+    return { ...hit, url, source: "import" };
   }
   let slug: string, match: (o: RawOpening) => boolean;
   const uuid = u.pathname.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0]?.toLowerCase();
@@ -448,11 +460,12 @@ export async function importJobs(
   const companyFor = (vendor: string, slug: string) =>
     String((targets ?? []).find((t) => t.slug === slug && (t.vendor === vendor || vendor === "ashby"))?.company ?? "") ||
     slug.charAt(0).toUpperCase() + slug.slice(1);
+  const ttHosts = new Set((targets ?? []).filter((t) => t.vendor === "teamtailor").map((t) => String(t.slug)));
   const results: ImportResult[] = [];
   const openings: RawOpening[] = [];
   for (const url of urls) {
     try {
-      openings.push(await resolvePosting(url, companyFor));
+      openings.push(await resolvePosting(url, companyFor, ttHosts));
       results.push({ url, ok: true });
     } catch (e) {
       results.push({ url, ok: false, error: e instanceof Error ? e.message : String(e) });

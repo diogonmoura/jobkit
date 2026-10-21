@@ -66,3 +66,17 @@ test("careers pages with an embedded job board are detected", async () => {
   assert.deepEqual(findEmbeddedBoard('<a href="https://jobs.eu.lever.co/acme/123">x</a>'), { vendor: "lever-eu", slug: "acme" });
   assert.equal(findEmbeddedBoard("<p>no board here</p>"), null);
 });
+
+test("Teamtailor RSS feeds are parsed and custom-domain career sites detected", async () => {
+  const { parseTeamtailorRss } = await import("./scan/sources");
+  const { findEmbeddedBoard } = await import("./watchlist");
+  const xml = `<rss version="2.0"><channel><item><title>Head of Ops &amp; CX</title><description>&lt;p&gt;Lead the team.&lt;/p&gt;</description>
+<link>https://careers.example.com/jobs/123-head-of-ops</link><remoteStatus>hybrid</remoteStatus><guid>g1</guid>
+<tt:locations><tt:location><tt:name>HQ</tt:name><tt:city>Madrid</tt:city><tt:country>Spain</tt:country></tt:location></tt:locations></item></channel></rss>`;
+  const [o] = parseTeamtailorRss(xml, { company: "Example", vendor: "teamtailor", slug: "careers.example.com" });
+  assert.equal(o.title, "Head of Ops & CX");
+  assert.equal(o.externalKey, "teamtailor:careers.example.com:123");
+  assert.equal(o.location, "Madrid, Spain (remote: hybrid)");
+  assert.equal(o.description, "Lead the team.");
+  assert.deepEqual(findEmbeddedBoard('<link href="https://assets-aws.teamtailor-cdn.com/x.css">', "careers.example.com"), { vendor: "teamtailor", slug: "careers.example.com" });
+});

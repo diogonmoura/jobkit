@@ -743,3 +743,8 @@ td.co .co-line{align-items:center}
 .wl-icon--danger{color:#b3261e}
 .wl-icon--danger:hover{background:rgba(179,38,30,.1)}
 @media (max-width:560px){.wl-icon{width:44px;height:44px}.wl-actions{gap:8px}}
+
+/* Considering (pre-application) marker on job cards */
+.job-considering__badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.8rem;font-weight:600;background:rgba(245,166,35,.16);border:1px solid rgba(245,166,35,.4);color:#8a5a00}
+.job-history{list-style:none;margin:6px 0 0;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.35);font-size:.82rem;display:grid;gap:4px}
+.job-history time{font-variant-numeric:tabular-nums;opacity:.7;margin-right:6px}

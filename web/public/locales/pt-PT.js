@@ -3,6 +3,7 @@
 export default {
  "lang": "pt-PT",
  "strings": {
+  "★ Considering": "★ A considerar",
   "Role constraints": "Restrições de função",
   "checked on every posting by a low-cost AI model; unsuitable roles are hidden from Jobs": "verificadas em cada anúncio por um modelo de IA de baixo custo; as funções inadequadas ficam escondidas em Vagas",
   "Skip engineer and developer titles (unless clearly a product or operations role)": "Ignorar títulos de engenharia e programação (exceto se forem claramente de produto ou operações)",
@@ -255,6 +256,8 @@ export default {
   "ghosted": "sem resposta"
  },
  "patterns": [
+  ["^★ Considering · since (.+)$", "★ A considerar · desde $1"],
+  ["^Saved (.+) to Jobs as considering\\.$", "$1 guardada nas Vagas como a considerar."],
   ["^Pause (.+)$", "Pausar $1"],
   ["^Resume (.+)$", "Retomar $1"],
   ["^Edit (.+)$", "Editar $1"],

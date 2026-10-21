@@ -3,10 +3,12 @@ import type { Env } from "./types";
 import { completeChat } from "./llm";
 import { parseBoardUrl, probe } from "./setup";
 
-export const VENDORS = ["greenhouse", "ashby", "lever", "lever-eu", "workable", "remote-com"] as const;
+export const VENDORS = ["greenhouse", "ashby", "lever", "lever-eu", "workable", "remote-com", "teamtailor"] as const;
 
 /** Board links embedded in a careers page (e.g. a Greenhouse embed or an "all jobs" link to Ashby/Lever/Workable). */
-export function findEmbeddedBoard(html: string): { vendor: string; slug: string } | null {
+export function findEmbeddedBoard(html: string, host = ""): { vendor: string; slug: string } | null {
+  // A Teamtailor career site on a custom domain (assets come from teamtailor-cdn.com).
+  if (host && /teamtailor-cdn\.com|teamtailor\.com\/assets/i.test(html)) return { vendor: "teamtailor", slug: host.toLowerCase() };
   const h = html.replace(/&amp;/g, "&");
   const pats: [RegExp, string][] = [
     [/boards(?:-api)?\.greenhouse\.io\/(?:embed\/job_board(?:\/js)?\?for=|v1\/boards\/)([a-z0-9_-]+)/i, "greenhouse"],
@@ -52,12 +54,12 @@ export async function resolveBoardUrl(env: Env, userId: string, request: Request
     pageHost = u.hostname.replace(/^(www|careers|jobs)\./, "");
     try {
       const r = await fetch(u.toString(), { headers: { "User-Agent": "Mozilla/5.0 (compatible; jobkit/1)", Accept: "text/html" }, redirect: "follow" });
-      parsed = parseBoardUrl(r.url) ?? (r.ok ? findEmbeddedBoard(await r.text()) : null);
+      parsed = parseBoardUrl(r.url) ?? (r.ok ? findEmbeddedBoard(await r.text(), new URL(r.url || u.toString()).hostname) : null);
     } catch {
       /* fall through */
     }
   }
-  if (!parsed) throw new Error("No supported job board found at that link. Supported: Greenhouse, Ashby, Lever, Workable and Remote.com. Try the link to the page that lists all open jobs.");
+  if (!parsed) throw new Error("No supported job board found at that link. Supported: Greenhouse, Ashby, Lever, Workable, Teamtailor and Remote.com. Try the link to the page that lists all open jobs.");
   const jobs = await probe(parsed.vendor, parsed.slug);
   if (jobs == null) throw new Error(`Found a ${parsed.vendor} board ("${parsed.slug}") but it didn't answer. Check the link.`);
   let company = (await boardName(parsed.vendor, parsed.slug)) || titleCase(parsed.slug);
