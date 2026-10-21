@@ -734,3 +734,12 @@ td.co .co-line{align-items:center}
   .wl-actions{grid-column:1/-1;order:4;justify-content:flex-start}
   .watch--targets li.wl-edit{grid-template-columns:1fr}
 }
+
+.wl-icon{display:inline-grid;place-items:center;width:34px;height:34px;padding:0;border-radius:50%;cursor:pointer;color:inherit;opacity:.85;
+  background:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.55);backdrop-filter:blur(6px);transition:background .15s,opacity .15s,transform .1s}
+.wl-icon:hover{background:rgba(255,255,255,.8);opacity:1}
+.wl-icon:active{transform:scale(.94)}
+.wl-icon:focus-visible{outline:2px solid rgba(124,92,255,.7);outline-offset:2px}
+.wl-icon--danger{color:#b3261e}
+.wl-icon--danger:hover{background:rgba(179,38,30,.1)}
+@media (max-width:560px){.wl-icon{width:44px;height:44px}.wl-actions{gap:8px}}

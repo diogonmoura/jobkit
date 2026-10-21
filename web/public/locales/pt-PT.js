@@ -255,6 +255,10 @@ export default {
   "ghosted": "sem resposta"
  },
  "patterns": [
+  ["^Pause (.+)$", "Pausar $1"],
+  ["^Resume (.+)$", "Retomar $1"],
+  ["^Edit (.+)$", "Editar $1"],
+  ["^Remove (.+)$", "Remover $1"],
   ["^Found a (.+) board with (\\d+) open jobs?\\. Check the details, then add it\\.$", "Encontrada uma página $1 com $2 vagas abertas. Confirma os dados e adiciona-a."],
   ["^(.+) is already on your watchlist\\.$", "$1 já está na tua lista."],
   ["^(.+) added\\. The next daily scan will include it\\.$", "$1 adicionada. A próxima pesquisa diária vai incluí-la."],
