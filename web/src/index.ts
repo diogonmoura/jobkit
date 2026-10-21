@@ -37,6 +37,12 @@ function loginRedirect(request: Request, env: Env): string {
   return `/login?next=${encodeURIComponent(url.pathname + url.search)}`;
 }
 
+/** Only a logo.dev publishable key (pk_…) may reach the browser; a secret key (sk_…) is ignored. */
+export function publishableLogoToken(env: Env): string {
+  const t = String(env.LOGO_DEV_TOKEN ?? "").trim();
+  return t.startsWith("pk_") ? t : "";
+}
+
 function configScript(env: Env): string {
   const auth = {
     external: externalAuth(env),
@@ -50,7 +56,7 @@ function configScript(env: Env): string {
   return (
     `window.__JOBKIT_SUPABASE=${JSON.stringify({ url: env.SUPABASE_URL ?? "", anonKey: env.SUPABASE_ANON_KEY ?? "", auth })};` +
     `window.__JOBKIT_LANG=${JSON.stringify(env.JOBKIT_LANG || "en")};` +
-    `window.__JOBKIT_LOGO_TOKEN=${JSON.stringify(env.LOGO_DEV_TOKEN || "")};`
+    `window.__JOBKIT_LOGO_TOKEN=${JSON.stringify(publishableLogoToken(env))};`
   );
 }
 
