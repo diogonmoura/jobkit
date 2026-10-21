@@ -7,6 +7,7 @@ import { completeChat, type ChatMessage } from "../llm";
 import { langName, tr } from "../i18n";
 import { refreshProfileFromFeedback, loadProfile, loadCandidateProfile, seedScanTargets, normalizeRubric } from "../preferences";
 import { dedupeOpenings, prefilterOpenings, companyExcluded, companyFlagged } from "./prefilter";
+import { clearEngineOpenings, loadEngineOpenings } from "./engine";
 import { fetchAllSources, fetchAshby, fetchTeamtailor, remoteComOpening, remoteComJson, type ScanTarget } from "./sources";
 import {
   estimateSalariesBatch,
@@ -250,7 +251,9 @@ export async function runJobScan(
     slug: String(t.slug),
   }));
 
-  const fetchedAll = await fetchAllSources(env, targets);
+  // Postings the jobkit engine found on boards this Worker can't read join the same pipeline.
+  const engineOpenings = await loadEngineOpenings(supabase, userId);
+  const fetchedAll = [...(await fetchAllSources(env, targets)), ...engineOpenings];
   if (targetsRaw?.length) {
     const now = new Date().toISOString();
     await supabase
@@ -377,6 +380,9 @@ export async function runJobScan(
     })
     .select("id")
     .single();
+
+  // Each engine posting is considered once, whether it was kept, filtered out or already known.
+  if (!insertErrors.length) await clearEngineOpenings(supabase, userId, engineOpenings);
 
   return {
     inserted,
