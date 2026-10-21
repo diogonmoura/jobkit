@@ -102,13 +102,13 @@ if __name__ == "__main__":
 class TestFollowingWrite(unittest.TestCase):
     def test_unchanged_companies_need_no_write_even_on_a_new_day(self):
         with tempfile.TemporaryDirectory() as tmp:
-            doc = {"updated": "2026-10-14", "companies": [{"company": "EDP"}]}
-            current = {"updated": "2026-10-01", "companies": [{"company": "EDP"}]}
+            doc = {"updated": "2026-10-14", "companies": [{"company": "Northwind"}]}
+            current = {"updated": "2026-10-01", "companies": [{"company": "Northwind"}]}
             self.assertIsNone(js.following_write(doc, tmp, current, 3))
 
     def test_a_changed_list_is_written_pinned_to_the_exported_version(self):
         with tempfile.TemporaryDirectory() as tmp:
-            doc = {"updated": "2026-10-14", "companies": [{"company": "Toggl"}]}
+            doc = {"updated": "2026-10-14", "companies": [{"company": "Globex"}]}
             entry = js.following_write(doc, tmp, {"companies": []}, 3)
             self.assertEqual(entry["if_version"], 3)
             self.assertEqual((entry["collection"], entry["doc_id"]), ("following", "all"))

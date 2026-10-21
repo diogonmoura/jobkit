@@ -556,7 +556,7 @@ SUCCESSFACTORS_RMK_LOCATION_CODES = {"RMT": "Remote", "GLO": "Global"}
 
 
 def _is_successfactors_rmk(html_text: str) -> bool:
-    """True for the newer client-rendered RMK search (Voith), whose server
+    """True for the newer client-rendered RMK search, whose server
     HTML has no tr.data-row table for _SuccessFactorsRowParser to read."""
     lowered = html_text.lower()
     return any(needle in lowered for needle in SUCCESSFACTORS_RMK_FINGERPRINTS)
@@ -579,7 +579,7 @@ def _post_json(url: str, body: dict, timeout: int = DEFAULT_TIMEOUT):
 
 
 def _rmk_location(raw) -> str:
-    """"Porto, PRT, 4150-196<br/>" -> "Porto, PRT, 4150-196"; "RMT, " -> "Remote"."""
+    """"Porto, PRT, 4000-001<br/>" -> "Porto, PRT, 4000-001"; "RMT, " -> "Remote"."""
     parts = []
     for item in _as_list(raw):
         text = html.unescape(re.sub(r"<[^>]*>", " ", _as_str(item)))
@@ -631,7 +631,7 @@ def _fetch_successfactors_rmk_postings(source: Source, timeout: int) -> List[Pos
 
     Sorted by date on purpose: the default (relevance) order is not stable
     between requests, so paging through it returned some jobs twice and
-    others never (181 distinct ids out of 222 on Voith's live board), while
+    others never (181 distinct ids out of 222 on one live board), while
     the date order returned every one exactly once.
     """
     base_url = "https://{}".format(source.slug)
@@ -723,7 +723,7 @@ def parse_ashby_board(payload, slug: str) -> List[Posting]:
 def _fetch_ashby_postings(source: Source, url: str, timeout: int) -> List[Posting]:
     """Ashby's public posting API, falling back to the hosted board's own query.
 
-    Some companies (Toggl) switch the public API off, which answers 404, while
+    Some companies switch the public API off, which answers 404, while
     their board page still lists every role. Both return the same posting
     ids, so seen-state carries across whichever one answered.
     """
@@ -756,8 +756,8 @@ def _fetch_ashby_postings(source: Source, url: str, timeout: int) -> List[Postin
 
 # --- Workday -------------------------------------------------------------------
 #
-# Slug: "<host>/<tenant>/<site>", e.g. "outsystems.wd503.myworkdayjobs.com/
-# outsystems/OutSystems". The tenant is usually the host's first label, but
+# Slug: "<host>/<tenant>/<site>", e.g. "northwind.wd503.myworkdayjobs.com/
+# northwind/Northwind". The tenant is usually the host's first label, but
 # the myworkdaysite.com hosts are shared, so it is spelled out.
 
 WORKDAY_PAGE_SIZE = 20  # the jobs endpoint refuses larger pages
@@ -848,12 +848,12 @@ def _fetch_workday_postings(source: Source, timeout: int) -> List[Posting]:
 
 # --- Taleo Business Edition ------------------------------------------------------
 #
-# Slug: "<host>/<instance>/<org>/<cws>", e.g. "lde.tbe.taleo.net/lde02/BARHOLD/37".
+# Slug: "<host>/<instance>/<org>/<cws>", e.g. "lde.tbe.taleo.net/lde02/NORTHWIND/37".
 # The career section's RSS feed lists every open requisition in one response,
 # with location, so there is no paging. Taleo Enterprise (careersection URLs)
 # is a different product and is not covered.
 
-TALEO_MAX_BYTES = 8_000_000  # Parfois's feed is ~1 MB with full descriptions
+TALEO_MAX_BYTES = 8_000_000  # one retailer's feed is ~1 MB with full descriptions
 
 
 def _taleo_parts(slug: str) -> Tuple[str, str, str, str]:
@@ -916,7 +916,7 @@ def _fetch_taleo_postings(source: Source, timeout: int) -> List[Posting]:
 
 # --- Teamtailor -------------------------------------------------------------------
 #
-# Slug: the career site's host, e.g. "careers.coverflex.com" or "acme.teamtailor.com".
+# Slug: the career site's host, e.g. "careers.acme.com" or "acme.teamtailor.com".
 # Every Teamtailor career site serves /jobs.rss with all open roles and their
 # locations in a tt: namespace.
 
@@ -1022,7 +1022,7 @@ HOST_PATTERNS: List[Tuple[str, str]] = [
     (r"(?:job-)?boards\.greenhouse\.io/(?!embed\b)([A-Za-z0-9_-]+)", "greenhouse"),
     (r"jobs\.eu\.lever\.co/([A-Za-z0-9_-]+)", "lever-eu"),
     (r"jobs\.lever\.co/([A-Za-z0-9_-]+)", "lever"),
-    # Ashby slugs may carry a domain ("happyrobot.ai", "neurons-lab.com").
+    # Ashby slugs may carry a domain ("northwind.ai", "acme-labs.com").
     (r"jobs\.ashbyhq\.com/([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)", "ashby"),
     (r"jobs\.smartrecruiters\.com/([A-Za-z0-9_-]+)", "smartrecruiters"),
     (r"careers\.smartrecruiters\.com/([A-Za-z0-9_-]+)", "smartrecruiters"),
@@ -1043,7 +1043,7 @@ UNSUPPORTED_HINTS: Dict[str, str] = {
 
 CONTENT_VENDORS: Dict[str, str] = {
     "successfactors": "successfactors",
-    # A Teamtailor career site on the company's own domain (careers.coverflex.com)
+    # A Teamtailor career site on the company's own domain (careers.acme.com)
     # loads its images and scripts from this CDN.
     "teamtailor-cdn.com": "teamtailor",
 }
@@ -1111,7 +1111,7 @@ def _match_url_vendor_in_text(text: str) -> Optional[Source]:
 def _match_content_vendor(html: str, url: str) -> Optional[Source]:
     """Detect a vendor identifiable only by a fingerprint in the page content,
     not a shared hostname. SF CSB customers each run their own vanity domain
-    (EDP's is jobs.edp.com itself), so there is no HOST_PATTERNS regex to
+    (e.g. jobs.northwind.example), so there is no HOST_PATTERNS regex to
     match against -- the slug is the pasted URL's own hostname, not a
     captured path segment.
     """
@@ -1848,7 +1848,7 @@ def _watched_match(watchlist: Watchlist, company: str, source: Source) -> Option
     """A company counts as followed if its board or its name is already watched.
 
     Matching on the board catches naming drift between the two files
-    ("OLX" in applications.md, "OLX Group" on the watchlist).
+    ("Acme" in applications.md, "Acme Group" on the watchlist).
     """
     for watch in watchlist.watches:
         if str(watch.source) == str(source) or watch.company.lower() == company.lower():
