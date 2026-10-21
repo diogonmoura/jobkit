@@ -381,5 +381,28 @@ create table if not exists public.jobkit_settings (
 );
 alter table public.jobkit_settings enable row level security;
 
+-- ===== supabase/migrations/20261021150000_jobkit_scan_targets_hq.sql =====
+-- Optional company headquarters shown as a chip on the Following tab (e.g. "Paris, France"). Empty = unknown.
+alter table public.jobkit_scan_targets
+  add column if not exists hq text not null default '';
+
+-- ===== supabase/migrations/20261021160000_jobkit_jobs_suitability.sql =====
+-- Cached suitability check per job (role constraints such as "no hands-on coding"):
+-- {ok, reason, model, key, checked_at}. ok=false hides the job from Jobs by default. Null = not checked.
+alter table public.jobkit_jobs
+  add column if not exists suitability jsonb;
+
+-- ===== supabase/migrations/20261021170000_jobkit_scan_targets_industry.sql =====
+-- Optional short industry label per watched company (e.g. "Fintech"), shown as a chip on Following. Empty = unknown.
+alter table public.jobkit_scan_targets
+  add column if not exists industry text not null default '';
+
+-- ===== supabase/migrations/20261021180000_jobkit_scan_teamtailor.sql =====
+-- Teamtailor career sites (slug = the career-site host; read from its public jobs.rss feed).
+alter table public.jobkit_scan_targets drop constraint if exists jobkit_scan_targets_vendor_check;
+alter table public.jobkit_scan_targets drop constraint if exists jobkit_scan_targets_vendor_check;
+alter table public.jobkit_scan_targets add constraint jobkit_scan_targets_vendor_check
+  check (vendor in ('greenhouse', 'lever', 'lever-eu', 'ashby', 'workable', 'remote-com', 'teamtailor'));
+
 -- Tell the Data API (PostgREST) about the new tables.
 notify pgrst, 'reload schema';
