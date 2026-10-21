@@ -80,6 +80,7 @@ describe("setup SQL", () => {
       assert.match(sql, new RegExp(`create table if not exists public\\.${table}`));
       assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`));
     }
+    assert.match(sql, /machine text not null,[\s\S]*primary key \(user_id, machine\)/);
   });
 });
 

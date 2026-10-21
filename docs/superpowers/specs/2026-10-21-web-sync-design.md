@@ -29,7 +29,7 @@ This connects the two. The engine keeps doing what it does well, reading boards 
 ## Anti-goals
 
 - A web edit silently undone by the engine, or the reverse.
-- The Mac and the Action disagreeing about what was last synced, and undoing each other's edits.
+- A machine whose copy is merely behind undoing another machine's edit.
 - The Supabase secret key in any committed file.
 - New Python dependencies (the engine is stdlib only, Python 3.9+).
 - Engine commands failing because Supabase is unreachable.
@@ -38,7 +38,7 @@ This connects the two. The engine keeps doing what it does well, reading boards 
 
 1. The two-way sync and the posting push live in the jobkit engine. The scheduled runner is GitHub Actions in the owner's private data repo.
 2. Telegram stays unchanged for now.
-3. The merge snapshot ("state") lives in Supabase, not in a file, so the Mac and the Action share one.
+3. The merge snapshot ("state") lives in Supabase, not in a file, one per machine (`jobkit_sync_state` keyed by user and machine). A first draft shared one snapshot; a test showed that a copy of `applications.md` that is merely behind then reads as an edit back to the old value and undoes the other machine's change.
 4. Delivered as two jobkit PRs (A: web, B: engine) plus a commit in the data repo.
 
 ## Design
@@ -48,7 +48,8 @@ This connects the two. The engine keeps doing what it does well, reading boards 
 **Migration** `jobkit_engine_bridge`:
 
 - `jobkit_external_openings`: `user_id`, `external_key` (text, primary key with `user_id`), `company`, `title`, `url`, `description`, `location`, `source` (the engine's board id, e.g. `successfactors:jobs.edp.com`), `found_at timestamptz default now()`. RLS on, no policies: only the service role (the Worker and the engine) touches it.
-- `jobkit_sync_state`: `user_id` (primary key), `state jsonb not null default '{}'`, `updated_at`. This is the engine's merge snapshot, keyed by `company\u001frole` exactly as `.jobkit-sync-state.json` is today. RLS on, no policies.
+- `jobkit_sync_state`: `user_id`, `machine` (primary key together), `state jsonb not null default '{}'`, `updated_at`. One merge snapshot per machine that syncs, in the same shape as `.jobkit-sync-state.json`. RLS on, no policies.
+- A trigger moves `jobkit_apps.updated_at` on every update (the web app's writes never set it), so the engine's conditional updates can see web edits.
 - `npm run build:sql` regenerates `public/setup/jobkit-schema.sql`.
 
 **Scan** (`src/scan/pipeline.ts`, `runJobScan`): after `fetchAllSources`, read the user's rows from `jobkit_external_openings`, map them to the same raw-opening shape the sources return (`source: "engine"`), and add them to the fetched list. They then go through the existing exclusion, prefilter, duplicate check (by `external_key` and by URL against jobs and applications), Claude scoring and salary. After the scan stores its results, delete the external rows it read, whether they were kept or filtered out, so each one is considered once.

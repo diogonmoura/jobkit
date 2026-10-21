@@ -15,11 +15,14 @@ create table if not exists public.jobkit_external_openings (
 );
 alter table public.jobkit_external_openings enable row level security;
 
--- The engine's merge snapshot for syncing applications.md with jobkit_apps, shared by every machine that syncs.
+-- The engine's merge snapshot for syncing applications.md with jobkit_apps: one per machine that syncs
+-- (a laptop, a scheduled GitHub Action), so a copy that is merely behind never reads as an edit.
 create table if not exists public.jobkit_sync_state (
-  user_id uuid primary key references auth.users (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  machine text not null,
   state jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  primary key (user_id, machine)
 );
 alter table public.jobkit_sync_state enable row level security;
 
