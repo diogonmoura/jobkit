@@ -699,3 +699,9 @@ td.co .co-line{align-items:center}
 .watch .note{grid-column:1/-1}
 @media (max-width:560px){.watch li{grid-template-columns:minmax(0,1fr) auto}.watch .co-chips{grid-column:1/-1;order:3}}
 .job-card.is-highlight{outline:2px solid var(--mf-accent);outline-offset:2px;box-shadow:0 0 0 6px color-mix(in srgb,var(--mf-accent) 15%,transparent);transition:box-shadow .3s ease}
+
+/* Suitability filter */
+.job-card--filtered{opacity:.7}
+.job-card--filtered:hover,.job-card--filtered:focus-within{opacity:1}
+.job-chip--filtered{color:var(--mf-text);border-color:color-mix(in srgb,var(--mf-text) 25%,transparent);background:color-mix(in srgb,var(--mf-text) 6%,transparent)}
+#toggle-filtered[aria-pressed="true"]{background:color-mix(in srgb,var(--mf-accent) 12%,transparent)}

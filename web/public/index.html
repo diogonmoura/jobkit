@@ -94,7 +94,8 @@
       <section>
         <div class="toolbar">
           <h2 class="tracker-section-title">Jobs found</h2>
-          <button type="button" class="mf-btn mf-btn--primary" id="scan-now">Scan now</button>
+          <span class="mf-cluster"><button type="button" class="mf-btn mf-btn--ghost" id="toggle-filtered" aria-pressed="false" hidden>Show filtered</button>
+          <button type="button" class="mf-btn mf-btn--primary" id="scan-now">Scan now</button></span>
         </div>
         <p class="mf-muted tracker-lede" id="scan-status" aria-live="polite">Daily scan at 07:00 UTC. Use 👍/👎 feedback to tune your profile.</p>
         <div class="mf-card mf-glass card--flush"><ul class="job-cards" id="job-cards"></ul></div>
@@ -119,6 +120,8 @@
           <div class="mf-field"><span>Companies to flag (e.g. IT services, outsourcing)</span><div class="pill-input" data-pills="pref-flag-companies" data-pill-label="Companies to flag (e.g. IT services, outsourcing)"></div><input type="hidden" id="pref-flag-companies" /></div>
           <label class="mf-field"><span>Target compensation</span><input id="pref-target-comp" placeholder="e.g. 90–110k base + bonus" /></label>
           <div class="mf-field"><span>Languages</span><div class="pill-input" data-pills="pref-languages" data-pill-label="Languages"></div><input type="hidden" id="pref-languages" /></div>
+          <div class="mf-field" style="grid-column:1/-1"><span>Role constraints <span class="pref-hint">checked on every posting by a low-cost AI model; unsuitable roles are hidden from Jobs</span></span><div class="pill-input" data-pills="pref-constraints" data-pill-label="Role constraints"></div><input type="hidden" id="pref-constraints" data-sep="nl" /></div>
+          <label class="mf-field mf-field--checkbox" style="grid-column:1/-1"><span><input type="checkbox" id="pref-eng-titles" /> Skip engineer and developer titles (unless clearly a product or operations role)</span></label>
           <label class="mf-field"><span>Notice period</span><input id="pref-notice" placeholder="e.g. 60 days" /></label>
           <label class="mf-field"><span>Travel availability</span><input id="pref-travel" placeholder="e.g. up to 2 days a month" /></label>
           <details class="jk-section" style="grid-column:1/-1" id="pref-candidate-section"><summary>Extra notes for scoring and answers (optional) <span class="mf-muted" id="pref-candidate-count"></span></summary><div class="jk-section__body">
@@ -132,6 +135,7 @@
           <button type="button" class="mf-btn mf-btn--primary" id="save-preferences">Save</button>
           <button type="button" class="mf-btn mf-btn--ghost" id="refresh-preferences-ai">Refine with AI</button>
           <button type="button" class="mf-btn mf-btn--ghost" id="seed-preferences">Seed from Master CV</button>
+          <button type="button" class="mf-btn mf-btn--ghost" id="recheck-jobs">Re-check jobs</button>
           <span class="cv-generating" id="pref-status" aria-live="polite"></span>
         </div>
       </section>
@@ -191,10 +195,11 @@ const coLogo=(company,size)=>logoHtml(company,{domain:coDomains.get(normCo(compa
 const openSections=new Set();
 const section=(key,title,body,extra="")=>`<details class="jk-section" data-sec="${esc(key)}"${openSections.has(key)?" open":""}><summary>${title}${extra?` <span class="mf-muted">${extra}</span>`:""}</summary><div class="jk-section__body">${body}</div></details>`;
 document.addEventListener("toggle",e=>{const d=e.target;if(!d.dataset||!d.dataset.sec)return;if(d.open){openSections.add(d.dataset.sec);autogrowAll(d)}else openSections.delete(d.dataset.sec)},true);
-let voted=new Map(),scanTargets=[];
+let voted=new Map(),scanTargets=[],showFiltered=false;
+const isFiltered=j=>Boolean(j.suitability&&j.suitability.ok===false);
 const VENDOR={greenhouse:"Greenhouse",lever:"Lever","lever-eu":"Lever (EU)",ashby:"Ashby",workable:"Workable","remote-com":"Remote.com"};
 // Per-company chips on the Following tab: HQ (optional setting on the scan target) and matching open jobs.
-function openJobsFor(company){const k=normCo(company);return jobs.filter(j=>!j.dismissed&&!appForJob(j.id)&&normCo(j.company)===k).length}
+function openJobsFor(company){const k=normCo(company);return jobs.filter(j=>!j.dismissed&&!appForJob(j.id)&&!isFiltered(j)&&normCo(j.company)===k).length}
 function hqFor(company){const k=normCo(company);const t=scanTargets.find(x=>normCo(x.company)===k&&x.hq);return t?t.hq:""}
 function coChips(company,hq){
   const n=openJobsFor(company);
@@ -402,10 +407,11 @@ async function loadCandidateProfile(){
   try{const r=await apiJson("/preferences");if(!prefDirty&&$("pref-candidate"))$("pref-candidate").value=r.candidateProfile||"";updateCandidateCount()}catch(e){}
 }
 // ---- Preferences: list fields as removable chips (stored as before, comma-separated) ----
-function pillValues(id){return listFromCsv($(id)?.value)}
+const pillNl=id=>$(id)?.dataset.sep==="nl";
+function pillValues(id){return pillNl(id)?String($(id)?.value||"").split("\n").map(x=>x.trim()).filter(Boolean):listFromCsv($(id)?.value)}
 function setPillValues(id,vals,dirty=true){
   const seen=new Set(),out=[];for(const v of vals){const k=v.toLowerCase();if(v&&!seen.has(k)){seen.add(k);out.push(v)}}
-  $(id).value=csvFromList(out);if(dirty)prefDirty=true;renderPills(id);
+  $(id).value=pillNl(id)?out.join("\n"):csvFromList(out);if(dirty)prefDirty=true;renderPills(id);
 }
 function renderPills(id){
   const box=document.querySelector(`[data-pills="${id}"]`);if(!box)return;
@@ -415,13 +421,14 @@ function renderPills(id){
   if(had)box.querySelector("input")?.focus();
 }
 function renderAllPills(){document.querySelectorAll("[data-pills]").forEach(b=>renderPills(b.dataset.pills))}
-function addPill(input){const id=input.dataset.pillAdd,parts=listFromCsv(input.value);input.value="";if(parts.length)setPillValues(id,[...pillValues(id),...parts])}
+function addPill(input){const id=input.dataset.pillAdd,parts=pillNl(id)?[input.value.trim()].filter(Boolean):listFromCsv(input.value);input.value="";if(parts.length)setPillValues(id,[...pillValues(id),...parts])}
 document.addEventListener("keydown",e=>{const inp=e.target.closest&&e.target.closest("[data-pill-add]");if(!inp)return;
-  if(e.key==="Enter"||e.key===","){e.preventDefault();addPill(inp)}
+  if(e.key==="Enter"||(e.key===","&&!pillNl(inp.dataset.pillAdd))){e.preventDefault();addPill(inp)}
   else if(e.key==="Backspace"&&!inp.value){const id=inp.dataset.pillAdd,v=pillValues(id);if(v.length){v.pop();setPillValues(id,v)}}});
 document.addEventListener("focusout",e=>{const inp=e.target.closest&&e.target.closest("[data-pill-add]");if(inp&&inp.value.trim())addPill(inp)});
 document.addEventListener("paste",e=>{const inp=e.target.closest&&e.target.closest("[data-pill-add]");if(!inp)return;const t=(e.clipboardData||window.clipboardData)?.getData("text")||"";
-  if(/[,\n]/.test(t)){e.preventDefault();const id=inp.dataset.pillAdd;setPillValues(id,[...pillValues(id),...t.split(/[,\n]/).map(x=>x.trim()).filter(Boolean)])}});
+  const id=inp.dataset.pillAdd,sep=pillNl(id)?/\n/:/[,\n]/;
+  if(sep.test(t)){e.preventDefault();setPillValues(id,[...pillValues(id),...t.split(sep).map(x=>x.trim()).filter(Boolean)])}});
 document.addEventListener("click",e=>{const del=e.target.closest("[data-pill-del]");if(del){const [id,i]=del.dataset.pillDel.split("|");const v=pillValues(id);v.splice(+i,1);setPillValues(id,v);return}
   const box=e.target.closest("[data-pills]");if(box&&!e.target.closest("button"))box.querySelector("input")?.focus()});
 function updateCandidateCount(){const n=($("pref-candidate")?.value||"").trim().length;const c=$("pref-candidate-count");if(c)c.textContent=n?n.toLocaleString()+" characters":"empty"}
@@ -446,6 +453,8 @@ function bindPreferencesForm(){
   $("pref-languages").value=p.languages||"";
   $("pref-notice").value=p.notice_period||"";
   $("pref-travel").value=p.travel||"";
+  $("pref-constraints").value=(p.role_constraints||[]).join("\n");
+  $("pref-eng-titles").checked=Boolean(p.exclude_engineering_titles);
   renderAllPills();
   prefDirty=false;
 }
@@ -469,7 +478,10 @@ function readPreferencesForm(){
     target_comp:$("pref-target-comp").value.trim(),
     languages:$("pref-languages").value.trim(),
     notice_period:$("pref-notice").value.trim(),
-    travel:$("pref-travel").value.trim()
+    travel:$("pref-travel").value.trim(),
+    role_constraints:pillValues("pref-constraints"),
+    exclude_engineering_titles:$("pref-eng-titles").checked,
+    ...(prefProfile&&prefProfile.suitability_model?{suitability_model:prefProfile.suitability_model}:{})
   };
 }
 
@@ -610,8 +622,11 @@ let jobsRenderPending=false;
 function renderJobs(){
   if(document.activeElement&&document.activeElement.closest&&document.activeElement.closest("#job-cards textarea, #job-cards input")){jobsRenderPending=true;return}
   refreshDomains();
-  const list=jobs.filter(j=>!j.dismissed&&!appForJob(j.id)).slice().sort((a,b)=>(Number(b.scan_score)||0)-(Number(a.scan_score)||0)||String(b.created_at||"").localeCompare(String(a.created_at||"")));
-  $("n-jobs").textContent=list.filter(j=>j.is_new).length||list.length||"";
+  const pool=jobs.filter(j=>!j.dismissed&&!appForJob(j.id));
+  const nFiltered=pool.filter(isFiltered).length;
+  const tf=$("toggle-filtered");if(tf){tf.hidden=!nFiltered;tf.textContent=(showFiltered?"Hide filtered":"Show filtered")+" ("+nFiltered+")";tf.setAttribute("aria-pressed",String(showFiltered))}
+  const list=pool.filter(j=>showFiltered||!isFiltered(j)).slice().sort((a,b)=>(Number(b.scan_score)||0)-(Number(a.scan_score)||0)||String(b.created_at||"").localeCompare(String(a.created_at||"")));
+  $("n-jobs").textContent=list.filter(j=>j.is_new&&!isFiltered(j)).length||list.filter(j=>!isFiltered(j)).length||"";
   if(!list.length){
     $("job-cards").innerHTML=`<li class="empty mf-muted">${connected?"No jobs yet. Click Scan now or wait for the daily scan.":"Connecting to the database…"}</li>`;
     return;
@@ -620,11 +635,12 @@ function renderJobs(){
     const open=openJobId===j.id;
     const app=appForJob(j.id);
     const sal=formatSalary(j.salary);
-    return `<li class="job-card mf-glass" data-job="${esc(j.id)}" data-company="${esc(normCo(j.company))}">
+    return `<li class="job-card mf-glass${isFiltered(j)?" job-card--filtered":""}" data-job="${esc(j.id)}" data-company="${esc(normCo(j.company))}">
       <div class="job-card__head">
         <div class="job-card__title">${coLogo(j.company,"lg")}<div><b>${esc(j.company)}</b> · ${esc(j.role)} ${j.is_new?`<span class="job-badge-novo">New${j.source==="scan"?" · Daily scan":""}</span>`:""}
         <div class="mf-muted">${esc(j.location||"")} ${j.scan_score!=null?`<span class="job-card__score">${esc(j.scan_score)}/100</span>`:""}</div>
         ${j.match_reason?`<p class="mf-muted">${esc(j.match_reason)}</p>`:""}
+        ${isFiltered(j)?`<div class="job-flags"><span class="job-chip job-chip--filtered">⊘ Filtered: ${esc(j.suitability.reason||"breaks a role constraint")}</span></div>`:""}
         ${scoreBreakdownHtml(j.score_breakdown)}
         ${(j.flags||[]).length?`<div class="job-flags">${j.flags.map(f=>`<span class="job-chip job-chip--flag">⚑ ${esc(localizeFlag(f,LANG))}</span>`).join("")}</div>`:""}</div></div>
         ${voted.has(j.id)?"":`<div class="job-vote cv-no-print" role="group" aria-label="Feedback"><button type="button" data-job-up="${esc(j.id)}" aria-label="Good fit" title="Good fit">👍</button><button type="button" data-job-down="${esc(j.id)}" aria-label="Not a fit" title="Not a fit">👎</button></div>`}
@@ -878,6 +894,12 @@ async function generateCv(id){
   }
 }
 
+$("toggle-filtered")?.addEventListener("click",()=>{showFiltered=!showFiltered;renderJobs()});
+$("recheck-jobs")?.addEventListener("click",async()=>{
+  $("pref-status").textContent="Checking jobs…";
+  try{const r=await apiJson("/jobs/suitability",{method:"POST",body:{force:true}});$("pref-status").textContent=`Checked ${r.checked} jobs, ${r.hidden} filtered (cost ~$${Number(r.costUsd||0).toFixed(4)}).`}
+  catch(e){$("pref-status").textContent="";toast("Error: "+(e&&e.message||e))}
+});
 $("scan-now")?.addEventListener("click",async()=>{
   if(scanBusy)return;scanBusy=true;$("scan-status").textContent="Scanning for jobs…";
   try{
@@ -892,6 +914,7 @@ $("scan-now")?.addEventListener("click",async()=>{
   $(id)?.addEventListener("input",()=>{prefDirty=true});
 });
 $("pref-remote")?.addEventListener("change",()=>{prefDirty=true});
+$("pref-eng-titles")?.addEventListener("change",()=>{prefDirty=true});
 $("save-preferences")?.addEventListener("click",async()=>{
   const profile=readPreferencesForm();
   $("pref-status").textContent="Saving…";

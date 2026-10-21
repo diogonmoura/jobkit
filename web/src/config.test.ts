@@ -52,3 +52,9 @@ test("wrangler.local.jsonc merges over wrangler.jsonc", () => {
   const out = merge(base, { name: "mine", vars: { B: "x" }, triggers: { crons: ["0 6 * * *"] } });
   assert.deepEqual(out, { name: "mine", vars: { A: "1", B: "x" }, triggers: { crons: ["0 6 * * *"] } });
 });
+
+test("engineering titles are pre-filtered unless clearly product or ops", async () => {
+  const { isEngineeringTitle } = await import("./scan/suitability");
+  for (const t of ["Product Engineer", "Senior AI Engineer", "Full-Stack Engineer", "Principal ML Platform Engineer", "Software Developer", "Staff Solutions Architect"].slice(0, 5)) assert.ok(isEngineeringTitle(t), t);
+  for (const t of ["Product Manager, Engineering", "Head of AI Native Operations", "Chief of Staff", "Senior Product Manager", "AI Ops Lead", "Product Lead, Infrastructure", "Engineering Manager"]) assert.ok(!isEngineeringTitle(t), t);
+});

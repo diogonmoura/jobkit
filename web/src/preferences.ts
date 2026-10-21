@@ -66,6 +66,9 @@ export function normalizeProfile(raw: unknown): PreferenceProfile {
     rubric: normalizeRubric(p.rubric),
     min_score: Math.min(100, Math.max(0, Number(p.min_score ?? 50) || 50)),
     ...(p.onboarded_at ? { onboarded_at: String(p.onboarded_at) } : {}),
+    role_constraints: strList(p.role_constraints),
+    exclude_engineering_titles: Boolean(p.exclude_engineering_titles),
+    ...(typeof p.suitability_model === "string" && p.suitability_model.trim() ? { suitability_model: p.suitability_model.trim() } : {}),
     ...(typeof p.rubric_notes === "string" && p.rubric_notes.trim() ? { rubric_notes: p.rubric_notes } : {}),
     ...(typeof p.writing_rules === "string" && p.writing_rules.trim() ? { writing_rules: p.writing_rules } : {}),
     ...(Array.isArray(p.custom_flags)
@@ -310,7 +313,7 @@ export async function refreshProfileFromFeedback(
   profile.languages = current.languages;
   profile.notice_period = current.notice_period;
   profile.travel = current.travel;
-  for (const k of ["home_base", "remote_policy", "work_authorization", "focus", "company_types_avoid", "company_types_flag", "rubric", "min_score", "onboarded_at", "rubric_notes", "writing_rules", "custom_flags"] as const) {
+  for (const k of ["home_base", "remote_policy", "work_authorization", "focus", "company_types_avoid", "company_types_flag", "rubric", "min_score", "onboarded_at", "rubric_notes", "writing_rules", "custom_flags", "role_constraints", "exclude_engineering_titles", "suitability_model"] as const) {
     (profile as Record<string, unknown>)[k] = current[k];
   }
   if (typeof (parsed as { remote?: unknown })?.remote !== "boolean") profile.remote = current.remote;

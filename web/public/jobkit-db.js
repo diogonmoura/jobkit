@@ -399,6 +399,7 @@ function rowToJob(row) {
     cv_analysis: row.cv_analysis ?? "",
     cv_generated_at: row.cv_generated_at ?? null,
     answers: row.answers ?? null,
+    suitability: row.suitability ?? null,
     created_at: row.created_at,
   };
 }
