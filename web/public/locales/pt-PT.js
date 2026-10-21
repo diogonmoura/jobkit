@@ -3,6 +3,13 @@
 export default {
  "lang": "pt-PT",
  "strings": {
+  "Role constraints": "Restrições de função",
+  "checked on every posting by a low-cost AI model; unsuitable roles are hidden from Jobs": "verificadas em cada anúncio por um modelo de IA de baixo custo; as funções inadequadas ficam escondidas em Vagas",
+  "Skip engineer and developer titles (unless clearly a product or operations role)": "Ignorar títulos de engenharia e programação (exceto se forem claramente de produto ou operações)",
+  "Re-check jobs": "Voltar a verificar vagas",
+  "Checking jobs…": "A verificar vagas…",
+  "Headquarters": "Sede",
+  "0 open jobs": "0 vagas abertas",
   "Daily scan watchlist": "Lista de vigilância da pesquisa diária",
   "Company job boards the daily scan reads. Change them in": "Páginas de emprego das empresas que a pesquisa diária lê. Altera-as no",
   "scanning": "em pesquisa",
@@ -230,6 +237,12 @@ export default {
   "ghosted": "sem resposta"
  },
  "patterns": [
+  ["^Show filtered \\((\\d+)\\)$", "Mostrar filtradas ($1)"],
+  ["^Hide filtered \\((\\d+)\\)$", "Esconder filtradas ($1)"],
+  ["^⊘ Filtered: (.*)$", "⊘ Filtrada: $1"],
+  ["^Checked (\\d+) jobs, (\\d+) filtered \\(cost (.*)\\)\\.$", "$1 vagas verificadas, $2 filtradas (custo $3)."],
+  ["^1 open job$", "1 vaga aberta"],
+  ["^(\\d+) open jobs$", "$1 vagas abertas"],
   ["^(\\d+) answers$", "$1 respostas"],
   ["^scanned (.+)$", "pesquisada a $1"],
   ["^Remote: fully remote$", "Remoto: totalmente remoto"],

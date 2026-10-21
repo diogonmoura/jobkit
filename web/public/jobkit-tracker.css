@@ -687,3 +687,22 @@ td.co .co-line{align-items:center}
 .pill-input input.pill-input__field{flex:1;min-width:8rem;border:0;background:transparent;outline:0;box-shadow:none;padding:.2rem;font:inherit;color:inherit;width:auto}
 .pref-hint{font-size:var(--mf-text-xs,.78rem);color:var(--mf-text-muted);font-weight:400}
 .pref-grid{align-items:start}
+
+/* Following: HQ and open-jobs chips */
+.co-chips{display:inline-flex;flex-wrap:wrap;gap:.3rem;align-items:center;justify-self:start}
+.co-chip{display:inline-flex;align-items:center;gap:.25rem;font-size:.75rem;line-height:1.3;padding:.15rem .55rem;border-radius:999px;white-space:nowrap;
+  border:1px solid var(--mf-glass-border,var(--mf-border));background:var(--mf-glass-fill,transparent);color:var(--mf-text-muted);text-decoration:none}
+.co-chip--jobs{color:var(--mf-accent);border-color:color-mix(in srgb,var(--mf-accent) 35%,transparent);background:color-mix(in srgb,var(--mf-accent) 10%,transparent);font-weight:var(--mf-weight-semibold,600);cursor:pointer}
+.co-chip--jobs:hover,.co-chip--jobs:focus-visible{background:color-mix(in srgb,var(--mf-accent) 18%,transparent)}
+.co-chip--zero{opacity:.55;cursor:default}
+.watch li{grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) auto minmax(0,.8fr) auto}
+.watch .note{grid-column:1/-1}
+@media (max-width:560px){.watch li{grid-template-columns:minmax(0,1fr) auto}.watch .co-chips{grid-column:1/-1;order:3}}
+.job-card.is-highlight{outline:2px solid var(--mf-accent);outline-offset:2px;box-shadow:0 0 0 6px color-mix(in srgb,var(--mf-accent) 15%,transparent);transition:box-shadow .3s ease}
+
+/* Suitability filter */
+.job-card--filtered{opacity:.7}
+.job-card--filtered:hover,.job-card--filtered:focus-within{opacity:1}
+.job-chip--filtered{color:var(--mf-text);border-color:color-mix(in srgb,var(--mf-text) 25%,transparent);background:color-mix(in srgb,var(--mf-text) 6%,transparent)}
+#toggle-filtered[aria-pressed="true"]{background:color-mix(in srgb,var(--mf-accent) 12%,transparent)}
+[data-pills="pref-constraints"] .pill{border-radius:12px;padding:.35rem .35rem .35rem .7rem;line-height:1.45}

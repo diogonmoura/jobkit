@@ -229,7 +229,7 @@ export function createJobkitDb(supabase, userId) {
     async list() {
       const { data, error } = await supabase
         .from("jobkit_scan_targets")
-        .select("id, company, vendor, slug, enabled, last_scanned_at")
+        .select("*")
         .eq("user_id", userId)
         .order("company");
       if (error) throw error;
@@ -399,6 +399,7 @@ function rowToJob(row) {
     cv_analysis: row.cv_analysis ?? "",
     cv_generated_at: row.cv_generated_at ?? null,
     answers: row.answers ?? null,
+    suitability: row.suitability ?? null,
     created_at: row.created_at,
   };
 }

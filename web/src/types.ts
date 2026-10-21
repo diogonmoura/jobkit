@@ -85,6 +85,12 @@ export type PreferenceProfile = {
   custom_flags?: { label: string; title?: string }[];
   /** Extra writing rules for tailored CVs and application answers. */
   writing_rules?: string;
+  /** Hard constraints checked by a cheap model on each posting, e.g. "Exclude roles requiring hands-on coding". */
+  role_constraints?: string[];
+  /** Skip engineer/developer titles before any AI call, unless clearly a product/programme/ops role. */
+  exclude_engineering_titles?: boolean;
+  /** Model for the suitability check (default google/gemini-2.5-flash-lite). */
+  suitability_model?: string;
   /** Set when the setup wizard is finished. */
   onboarded_at?: string;
 };

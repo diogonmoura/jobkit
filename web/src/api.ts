@@ -11,6 +11,7 @@ import {
   seedProfileFromCv,
 } from "./preferences";
 import { runJobScan, importJobs } from "./scan/pipeline";
+import { recheckJobs } from "./scan/suitability";
 import { generateJobCv } from "./job-cv";
 import { generateJobAnswers } from "./job-answers";
 import { loadExperience } from "./experience";
@@ -117,6 +118,13 @@ export async function handleApi(
     if (path === "/scan" && request.method === "POST") {
       const result = await runJobScan(env, supabase, userId, "manual", request);
       return jsonResponse({ ok: true, ...result }, {}, pending);
+    }
+
+    // Re-check stored jobs against the role constraints (cached per job unless the rules change or force=true).
+    if (path === "/jobs/suitability" && request.method === "POST") {
+      const body = (await request.json().catch(() => ({}))) as { force?: boolean };
+      const res = await recheckJobs(env, supabase, userId, request, await loadProfile(supabase, userId), Boolean(body.force));
+      return jsonResponse({ ok: true, ...res }, {}, pending);
     }
 
     if (path === "/jobs/import" && request.method === "POST") {
