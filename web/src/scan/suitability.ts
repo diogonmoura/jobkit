@@ -8,6 +8,13 @@ export const SUITABILITY_MODEL = "google/gemini-2.5-flash-lite";
 
 export type Suitability = { ok: boolean; reason: string; model: string; key: string; checked_at: string };
 
+/** Posting text as plain text (some boards return escaped HTML). */
+export function plainText(s: string): string {
+  let t = String(s ?? "");
+  for (let i = 0; i < 2; i++) t = t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  return t.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+}
+
 const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 /**
@@ -79,7 +86,7 @@ export async function classifySuitability(
         content: JSON.stringify({
           constraints: rules,
           candidate_summary: summary,
-          jobs: chunk.map((it, i) => ({ i, title: it.title, company: it.company, posting: it.text.slice(0, 2500) })),
+          jobs: chunk.map((it, i) => ({ i, title: it.title, company: it.company, posting: plainText(it.text).slice(0, 2500) })),
         }),
       },
     ];
@@ -91,7 +98,7 @@ export async function classifySuitability(
         const n = start + Number(it.i);
         const evidence = String((it as { evidence?: string }).evidence ?? "").trim();
         // Only trust a "no" that quotes the posting.
-        const quoted = evidence.length > 8 && norm(chunk[Number(it.i)]?.text ?? "").includes(norm(evidence).slice(0, 40));
+        const quoted = evidence.length > 8 && norm(plainText(chunk[Number(it.i)]?.text ?? "")).includes(norm(evidence).slice(0, 40));
         if (n >= start && n < start + chunk.length && it.suitable === false && quoted) out[n] = { ok: false, reason: String(it.reason ?? "").trim().slice(0, 200) || "Breaks one of your role constraints.", model, key, checked_at: now };
       }
     } catch {
@@ -115,8 +122,15 @@ export async function recheckJobs(env: Env, supabase: SupabaseClient, userId: st
   if (error) throw error;
   const todo = (jobs ?? []).filter((j) => force || (j.suitability as Suitability | null)?.key !== key);
   const verdicts = new Map<string, Suitability>();
+  // A 👍 from the user always wins over the filter.
+  const { data: ups } = await supabase.from("jobkit_job_feedback").select("job_id").eq("user_id", userId).eq("signal", "up");
+  const liked = new Set((ups ?? []).map((u) => String(u.job_id)));
   const llm: typeof todo = [];
   for (const j of todo) {
+    if (liked.has(String(j.id))) {
+      verdicts.set(String(j.id), { ok: true, reason: "You marked this as a good fit.", model: "feedback", key, checked_at: new Date().toISOString() });
+      continue;
+    }
     const v = titleVerdict(profile, String(j.role));
     if (v) verdicts.set(String(j.id), v);
     else llm.push(j);
