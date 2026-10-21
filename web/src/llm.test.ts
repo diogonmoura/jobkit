@@ -67,3 +67,14 @@ describe("PROVIDERS", () => {
     assert.equal(PROVIDERS.anthropic.label, "Claude");
   });
 });
+
+describe("setup SQL", () => {
+  it("lets the database store every provider the code offers", async () => {
+    const { readFileSync } = await import("node:fs");
+    const sql = readFileSync(new URL("../public/setup/jobkit-schema.sql", import.meta.url), "utf8");
+    const checks = [...sql.matchAll(/jobkit_settings_provider_check\s+check\s*\(llm_provider in \(([^)]*)\)\)/gi)];
+    assert.ok(checks.length > 0);
+    const allowed = checks[checks.length - 1][1].match(/'([^']+)'/g)!.map((v) => v.slice(1, -1));
+    for (const provider of Object.keys(PROVIDERS)) assert.ok(allowed.includes(provider), `${provider} is not allowed by the database`);
+  });
+});
