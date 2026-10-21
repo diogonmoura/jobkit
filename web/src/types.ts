@@ -19,6 +19,24 @@ export interface Env {
   /** Optional: protects the first-run wizard on a public deploy until an owner exists. */
   SETUP_TOKEN?: string;
   SCAN_CRON_SECRET?: string;
+  /** UI language: "en" (default) or "pt-PT". Also the language of AI-written scan reasons and flags. */
+  JOBKIT_LANG?: string;
+  /** "builtin" (default): the /login page. "external": another app signs users in to the same Supabase project. */
+  AUTH_MODE?: string;
+  /** External mode: sign-in page; jobkit appends ?next=<url>. Needs COOKIE_DOMAIN shared with that app. */
+  LOGIN_URL?: string;
+  /** Optional: where Sign out goes (external mode hides Sign out without it). */
+  LOGOUT_URL?: string;
+  /** Optional: where the Settings button goes (default /setup). */
+  SETTINGS_URL?: string;
+  /** Optional extra nav link, e.g. back to a dashboard. */
+  HOME_URL?: string;
+  HOME_LABEL?: string;
+  /**
+   * Optional fallback for the LLM key: read an "enc:v1:" (SETTINGS_ENC_KEY) or plain key from another table,
+   * as "table.column" keyed by user_id, e.g. when a companion app already stores the user's OpenRouter key.
+   */
+  LLM_KEY_SOURCE?: string;
 }
 
 export type PreferenceProfile = {
@@ -59,6 +77,12 @@ export type PreferenceProfile = {
   rubric?: RubricWeights;
   /** Minimum score for the daily scan to add a job. */
   min_score?: number;
+  /** Free-text scoring guidance appended to the rubric (what makes a role a strong or weak fit). */
+  rubric_notes?: string;
+  /** Extra checks added as flags on matches; with `title` (a regex) only when the job title matches it. */
+  custom_flags?: { label: string; title?: string }[];
+  /** Extra writing rules for tailored CVs and application answers. */
+  writing_rules?: string;
   /** Set when the setup wizard is finished. */
   onboarded_at?: string;
 };

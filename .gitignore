@@ -7,3 +7,5 @@ web/.wrangler/
 web/.dev.vars
 web/dist/
 web/screenshots/
+web/wrangler.local.jsonc
+web/wrangler.generated.json

@@ -4,7 +4,7 @@ import { createServiceSupabase } from "./auth";
 /**
  * LLM access for jobkit. The provider, model and API key are chosen in the setup wizard and stored in
  * `jobkit_settings` (service-role only; the key is AES-256-GCM encrypted with SETTINGS_ENC_KEY, "enc:v1:" prefix).
- * OPENROUTER_API_KEY in the Worker env is a fallback.
+ * Fallbacks, in order: LLM_KEY_SOURCE (a key another app stores) and OPENROUTER_API_KEY in the Worker env.
  */
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -117,8 +117,24 @@ export async function loadLlmSettings(env: Env, userId: string): Promise<LlmSett
       }
     }
   }
+  const external = await loadExternalKey(env, userId);
+  if (external) return { provider: "openrouter", baseUrl: PROVIDERS.openrouter.baseUrl, model: "", apiKey: external };
   const envKey = env.OPENROUTER_API_KEY?.trim();
   return envKey ? { provider: "openrouter", baseUrl: PROVIDERS.openrouter.baseUrl, model: "", apiKey: envKey } : null;
+}
+
+/** LLM_KEY_SOURCE="table.column": an OpenRouter key another app stores per user (encrypted with the same SETTINGS_ENC_KEY). */
+async function loadExternalKey(env: Env, userId: string): Promise<string | null> {
+  const m = (env.LLM_KEY_SOURCE ?? "").trim().match(/^([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)$/i);
+  if (!m || !env.SUPABASE_SERVICE_ROLE_KEY) return null;
+  const [, table, column] = m;
+  try {
+    const { data } = await createServiceSupabase(env).from(table).select(column).eq("user_id", userId).maybeSingle();
+    const stored = data ? String((data as unknown as Record<string, unknown>)[column] ?? "") : "";
+    return stored ? (await decryptSecret(env, stored)) || null : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Cheap call that proves a key works: lists models (no tokens spent). */

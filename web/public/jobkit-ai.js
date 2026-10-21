@@ -1,6 +1,6 @@
 /** AI calls go through this Worker (/api/ai/chat), which uses the LLM key saved in Setup. The browser never sees the key. */
 export const AI_CHAT_URL = "/api/ai/chat";
-export const SETTINGS_URL = "/setup#llm";
+export const SETTINGS_URL = globalThis.__JOBKIT_SUPABASE?.auth?.settingsUrl || "/setup#llm";
 
 const DEMO_TAILORED = `# Jane Doe
 +351 900 000 000 | jane.doe@example.com | [linkedin.com/in/janedoe](https://www.linkedin.com/in/janedoe) | Porto, Portugal

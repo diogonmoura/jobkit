@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/jobkit-tracker.css" />
   <link rel="stylesheet" href="/jobkit-cv-print.css" />
   <script type="module" src="/jobkit-theme.js"></script>
+  <script type="module" src="/jobkit-i18n.js"></script>
 </head>
 <body class="mf-page hub-shell page--tracker">
   <div class="hub-backdrop" aria-hidden="true">
@@ -30,8 +31,9 @@
         <button type="button" class="mf-btn" role="tab" id="tab-preferences" aria-controls="view-preferences" aria-selected="false" tabindex="-1">Preferences</button>
         <button type="button" class="mf-btn" role="tab" id="tab-master-cv" aria-controls="view-master-cv" aria-selected="false" tabindex="-1">Master CV</button>
         <span class="mf-cluster__sep" aria-hidden="true"></span>
-        <a class="mf-btn mf-btn--ghost" href="/setup">Settings</a>
+        <a class="mf-btn mf-btn--ghost" href="/setup" id="settings-link">Settings</a>
         <button type="button" class="mf-btn mf-btn--ghost" data-theme-toggle aria-label="Toggle theme">Theme</button>
+        <a class="mf-btn mf-btn--ghost" id="home-link" href="/" hidden data-no-i18n></a>
         <button type="button" class="mf-btn mf-btn--ghost" id="sign-out">Sign out</button>
       </nav>
     </div>
@@ -121,6 +123,8 @@
           <label class="mf-field"><span>Travel availability</span><input id="pref-travel" placeholder="e.g. up to 2 days a month" /></label>
           <label class="mf-field" style="grid-column:1/-1"><span>Candidate profile (long text used for scoring)</span><textarea id="pref-candidate" rows="14" class="cv-editor job-posting-textarea"></textarea></label>
           <label class="mf-field" style="grid-column:1/-1"><span>Notes</span><textarea id="pref-notes" rows="3" class="cv-editor"></textarea></label>
+          <label class="mf-field" style="grid-column:1/-1"><span>Scoring guidance (added to the rubric)</span><textarea id="pref-rubric-notes" rows="4" class="cv-editor" placeholder="e.g. Roles where the focus is the core mandate score high; a token mention scores low."></textarea></label>
+          <label class="mf-field" style="grid-column:1/-1"><span>Writing rules for CVs and answers</span><textarea id="pref-writing-rules" rows="4" class="cv-editor" placeholder="e.g. British spelling; no buzzwords; numbers before adjectives."></textarea></label>
         </div>
         <div class="cv-toolbar cv-no-print">
           <button type="button" class="mf-btn mf-btn--primary" id="save-preferences">Save</button>
@@ -359,6 +363,8 @@ function bindPreferencesForm(){
   $("pref-exclude").value=csvFromList(p.keywords_exclude);
   $("pref-salary").value=Number(p.salary_floor?.amount||0)||"";
   $("pref-notes").value=p.notes||"";
+  $("pref-rubric-notes").value=p.rubric_notes||"";
+  $("pref-writing-rules").value=p.writing_rules||"";
   $("pref-exclude-companies").value=csvFromList(p.exclude_companies);
   $("pref-flag-companies").value=csvFromList(p.flag_companies);
   $("pref-target-comp").value=p.target_comp||"";
@@ -380,6 +386,8 @@ function readPreferencesForm(){
     keywords_exclude:listFromCsv($("pref-exclude").value),
     salary_floor:{amount:Number($("pref-salary").value)||0,currency:"EUR",period:"year"},
     notes:$("pref-notes").value.trim(),
+    rubric_notes:$("pref-rubric-notes").value.trim(),
+    writing_rules:$("pref-writing-rules").value.trim(),
     exclude_companies:listFromCsv($("pref-exclude-companies").value),
     flag_companies:listFromCsv($("pref-flag-companies").value),
     target_comp:$("pref-target-comp").value.trim(),
@@ -805,7 +813,7 @@ $("scan-now")?.addEventListener("click",async()=>{
   finally{scanBusy=false}
 });
 
-["pref-candidate","pref-exclude-companies","pref-flag-companies","pref-target-comp","pref-languages","pref-notice","pref-travel","pref-roles","pref-seniority","pref-industries","pref-locations","pref-companies","pref-keywords","pref-exclude","pref-salary","pref-notes"].forEach(id=>{
+["pref-candidate","pref-exclude-companies","pref-flag-companies","pref-target-comp","pref-languages","pref-notice","pref-travel","pref-roles","pref-seniority","pref-industries","pref-locations","pref-companies","pref-keywords","pref-exclude","pref-salary","pref-notes","pref-rubric-notes","pref-writing-rules"].forEach(id=>{
   $(id)?.addEventListener("input",()=>{prefDirty=true});
 });
 $("pref-remote")?.addEventListener("change",()=>{prefDirty=true});
@@ -1014,13 +1022,19 @@ render();
   if(!cfg||!cfg.url||!cfg.anonKey){connected=true;toast("Supabase config missing");render();return}
   const { createBrowserClient }=await import("https://esm.sh/@supabase/ssr@0.6.1");
   const { createJobkitDb }=await import("/jobkit-db.js");
+  // Auth: built-in /login, or an external sign-in page (AUTH_MODE=external) sharing Supabase cookies on COOKIE_DOMAIN.
+  const auth=cfg.auth||{};
   const client=createBrowserClient(cfg.url,cfg.anonKey,{
-    cookieOptions:{path:"/",sameSite:"lax",secure:location.protocol==="https:"}
+    cookieOptions:{...(auth.cookieDomain?{domain:auth.cookieDomain}:{}),path:"/",sameSite:"lax",secure:location.protocol==="https:"}
   });
+  const loginHref=()=>auth.external?(auth.loginUrl+(auth.loginUrl.includes("?")?"&":"?")+"next="+encodeURIComponent(location.href)):"/login?next="+encodeURIComponent(location.pathname+location.search);
   const { data: { session } }=await client.auth.getSession();
-  if(!session){location.replace("/login?next="+encodeURIComponent(location.pathname+location.search));return}
+  if(!session){location.replace(loginHref());return}
   db=createJobkitDb(client,session.user.id);
-  document.getElementById("sign-out")?.addEventListener("click",async()=>{await client.auth.signOut();location.replace("/login")});
+  if(auth.settingsUrl)$("settings-link").href=auth.settingsUrl;
+  if(auth.homeUrl){const h=$("home-link");h.href=auth.homeUrl;h.textContent=auth.homeLabel||"Home";h.hidden=false}
+  if(auth.external&&!auth.logoutUrl)$("sign-out").hidden=true;
+  document.getElementById("sign-out")?.addEventListener("click",async()=>{await client.auth.signOut();location.replace(auth.logoutUrl||(auth.external?loginHref():"/login"))});
   loadExp();
   db.collection("apps").onSnapshot(s=>{
     connected=true;

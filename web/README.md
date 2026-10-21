@@ -18,7 +18,7 @@ Everything personal (profile, rubric, watchlist, CV, AI key) lives in your datab
 
 ## Quick start (local)
 
-Requirements: Node 20+, a free [Supabase](https://supabase.com) project, an API key for [OpenRouter](https://openrouter.ai/keys) (or OpenAI, or any OpenAI-compatible API).
+Requirements: Node 22+ (wrangler 4.151 refuses older versions; `web/.nvmrc` pins 22), a free [Supabase](https://supabase.com) project, an API key for [OpenRouter](https://openrouter.ai/keys) (or OpenAI, or any OpenAI-compatible API).
 
 ```bash
 cd web
@@ -50,6 +50,8 @@ npm run deploy
 
 Open the Worker URL and complete `/setup`. The cron in `wrangler.jsonc` (`0 7 * * *`, UTC) runs the daily scan for the owner. For a custom domain, add it under *Workers → your Worker → Settings → Domains & routes* and set `SITE_ORIGIN`.
 
+**Private overrides.** Keep your own Worker name, custom domain, cron and vars out of the repo: copy `wrangler.local.example.jsonc` to `wrangler.local.jsonc` (gitignored). `npm run dev` and `npm run deploy` merge it over `wrangler.jsonc` (vars key by key; `triggers.crons` and `routes` replaced), so you can deploy an unmodified checkout. Pass `--name <worker>` to `wrangler secret put` when you rename the Worker.
+
 **`SETUP_TOKEN`** (optional, recommended for public URLs): until an owner exists, anyone who reaches `/setup` could claim the instance. With `SETUP_TOKEN` set, claiming the owner account requires that token.
 
 ### Configuration
@@ -67,6 +69,12 @@ Open the Worker URL and complete `/setup`. The cron in `wrangler.jsonc` (`0 7 * 
 | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `ADZUNA_COUNTRY` | secret / var, optional | Adds Adzuna search results for that country (default `gb`) |
 | `SITE_ORIGIN` | var, optional | Public URL, sent as `HTTP-Referer` to OpenRouter |
 | `COOKIE_DOMAIN` | var, optional | Share the auth cookie across subdomains (e.g. `.example.com`) |
+| `JOBKIT_LANG` | var, optional | UI language and language of AI-written reasons/flags/analysis: `en` (default) or `pt-PT` (European Portuguese). Locales live in `public/locales/` |
+| `AUTH_MODE`, `LOGIN_URL` | var, optional | `AUTH_MODE=external` sends signed-out visitors to `LOGIN_URL?next=<url>` instead of `/login`, for when another app on the same Supabase project signs users in (set `COOKIE_DOMAIN` so the session cookie is shared) |
+| `LOGOUT_URL`, `SETTINGS_URL`, `HOME_URL`, `HOME_LABEL` | var, optional | Where Sign out and Settings go, and an extra nav link (external mode hides Sign out without `LOGOUT_URL`) |
+| `LLM_KEY_SOURCE` | var, optional | `table.column` holding a per-user OpenRouter key another app already stores (plain or `enc:v1:` with the same `SETTINGS_ENC_KEY`); used when no key is saved in `/setup` |
+
+The Preferences tab also has **Scoring guidance** (appended to the scoring rubric) and **Writing rules** (applied to tailored CVs and application answers); `custom_flags` in the profile (`[{ "label": "…", "title": "<regex>" }]`) adds your own checks to matches.
 
 ### Database
 

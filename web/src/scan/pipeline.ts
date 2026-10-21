@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Env, PreferenceProfile, RawOpening, ScoreBreakdown } from "../types";
 import { createServiceSupabase } from "../auth";
 import { completeChat, type ChatMessage } from "../llm";
+import { langName, tr } from "../i18n";
 import { refreshProfileFromFeedback, loadProfile, loadCandidateProfile, seedScanTargets, normalizeRubric } from "../preferences";
 import { dedupeOpenings, prefilterOpenings, companyExcluded, companyFlagged } from "./prefilter";
 import { fetchAllSources, fetchAshby, remoteComOpening, remoteComJson, type ScanTarget } from "./sources";
@@ -38,8 +39,20 @@ export function standardFlags(o: RawOpening, llm: string[], profile: PreferenceP
   const title = o.title.toLowerCase();
   const terms = homeTerms(profile);
   const home = homeLabel(profile);
-  if (home && !terms.some((t) => loc.includes(t)) && !has(/eligib/i)) out.push(`Confirm you can work remotely from ${home} (local entity, EOR or contractor)`);
-  if (!has(/non-compete|compet/i)) out.push("Check the non-compete / outside-activities clause");
+  if (home && !terms.some((t) => loc.includes(t)) && !has(/eligib|elegib/i)) out.push(`Confirm you can work remotely from ${home} (local entity, EOR or contractor)`);
+  if (!has(/non-compete|compet|concorr/i)) out.push("Check the non-compete / outside-activities clause");
+  for (const f of profile.custom_flags ?? []) {
+    if (!f?.label || out.includes(f.label)) continue;
+    let applies = true;
+    if (f.title) {
+      try {
+        applies = new RegExp(f.title, "i").test(title);
+      } catch {
+        applies = false;
+      }
+    }
+    if (applies) out.push(f.label);
+  }
   return out.slice(0, 6);
 }
 
@@ -80,7 +93,7 @@ export function rubricText(profile: PreferenceProfile): string {
 - focus 0-${w.focus}: how central "${focus}" is to the role's actual mandate (core of the job = high; mentioned in passing = low).
 - seniority_scope 0-${w.seniority}: seniority (${profile.seniority.join(", ") || "as in the profile"}) and scope.
 - company 0-${w.company}: product company / the kind of company the candidate wants = high; ${avoid.length ? avoid.join(", ") : "consultancies and IT-services/outsourcing firms"} = low or 0.
-Flags (short labels, only those that apply or need checking): remote eligibility, non-compete, unclear mandate, company type to avoid.`;
+Flags (short labels, only those that apply or need checking): remote eligibility, non-compete, unclear mandate, company type to avoid${(profile.custom_flags ?? []).length ? ", " + (profile.custom_flags ?? []).map((f) => `"${f.label}"`).join(", ") : ""}.${profile.rubric_notes?.trim() ? `\nExtra guidance from the candidate:\n${profile.rubric_notes.trim()}` : ""}`;
 }
 
 /** Sentences about where the role can be done; these usually sit at the end of a posting, past the excerpt. */
@@ -123,7 +136,7 @@ export async function scoreOpenings(
       content:
         "You are a recruiter scoring job postings for one specific candidate. Apply the rubric strictly and return the breakdown. " +
         rubricText(profile) +
-        '\nReply with JSON only: {"items":[{"i":number,"tier":"T1"|"T2"|"T3"|"T4"|"-","remote":"total"|"hybrid"|"other","remote_points":number,"focus":number,"seniority_scope":number,"company_type":string,"company_points":number,"flags":string[],"reason":string}]} with one item per job. reason: one short, direct sentence in English.',
+        '\nReply with JSON only: {"items":[{"i":number,"tier":"T1"|"T2"|"T3"|"T4"|"-","remote":"total"|"hybrid"|"other","remote_points":number,"focus":number,"seniority_scope":number,"company_type":string,"company_points":number,"flags":string[],"reason":string}]} with one item per job. reason: one short, direct sentence in ' + langName(env) + '; flags in the same language.',
     },
     {
       role: "user",
@@ -153,7 +166,7 @@ export async function scoreOpenings(
     },
   ];
   const result = await completeChat(env, { request, userId, messages, model: "google/gemini-2.5-flash", json: true });
-  const scores = openings.map(() => ({ score: 0, reason: "Score unavailable.", breakdown: null as ScoreBreakdown | null, flags: [] as string[] }));
+  const scores = openings.map(() => ({ score: 0, reason: tr(env, "Score unavailable."), breakdown: null as ScoreBreakdown | null, flags: [] as string[] }));
   const clamp = (v: unknown, max: number) => Math.round(Math.min(max, Math.max(0, Number(v) || 0)));
   try {
     const parsed = JSON.parse(result.content) as { items?: Record<string, unknown>[] };
@@ -181,7 +194,7 @@ export async function scoreOpenings(
       const total = breakdown.tier_points + breakdown.remote_points + breakdown.focus + breakdown.seniority_scope + breakdown.company_points;
       const flags = Array.isArray(it.flags) ? it.flags.map(String).filter(Boolean).slice(0, 6) : [];
       if (companyFlagged(openings[i].company, profile) && !flags.some((f) => /company type|outsourc|services/i.test(f))) {
-        flags.push("Company type you asked to flag");
+        flags.push(tr(env, "Company type you asked to flag"));
       }
       scores[i] = {
         // With a remote policy, a remote score of 0 means "not eligible": cap the total.
@@ -280,7 +293,7 @@ export async function runJobScan(
 
   scored.sort((a, b) => b.score - a.score);
   const top = scored.filter((s) => s.score >= (profile.min_score ?? MIN_SCORE)).slice(0, 10);
-  for (const t of top) t.flags = standardFlags(t.opening, t.flags, profile);
+  for (const t of top) t.flags = standardFlags(t.opening, t.flags, profile).map((f) => tr(env, f));
 
   const salaryDb = env.SUPABASE_SERVICE_ROLE_KEY ? createServiceSupabase(env) : supabase;
   const seniority = profile.seniority[0] ?? "Senior";
@@ -434,7 +447,7 @@ export async function importJobs(
   const prepared = openings.map((o, i) => ({
     o,
     ...scores[i],
-    flags: standardFlags(o, scores[i].flags, profile),
+    flags: standardFlags(o, scores[i].flags, profile).map((f) => tr(env, f)),
     published: extractPublishedSalary(o.description),
     benefits: extractBenefits(o.description),
     loc: o.location || homeLabel(profile) || "Remote",
@@ -496,7 +509,7 @@ export async function importJobs(
       .eq("user_id", userId)
       .eq("job_id", id)
       .eq("signal", "up");
-    if (!ups) await supabase.from("jobkit_job_feedback").insert({ user_id: userId, job_id: id, signal: "up", reason: "Added manually" });
+    if (!ups) await supabase.from("jobkit_job_feedback").insert({ user_id: userId, job_id: id, signal: "up", reason: tr(env, "Added manually") });
   }
   return { results, costUsd };
 }

@@ -1,3 +1,4 @@
+import { langName } from "./i18n";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Env } from "./types";
 import { completeChat, type ChatMessage } from "./llm";
@@ -134,6 +135,7 @@ export async function generateJobAnswers(
   const home = (pp?.profile as any)?.home_base ?? {};
   const homeLabel = [home.city, home.country].filter(Boolean).join(", ");
   const workAuth = String((pp?.profile as any)?.work_authorization ?? "").trim();
+  const writingRules = String((pp?.profile as any)?.writing_rules ?? "").trim();
   const real = questions.filter((x) => !x.trivial);
 
   const messages: ChatMessage[] = [
@@ -153,8 +155,9 @@ export async function generateJobAnswers(
           : "Location and right to work: not set in the profile; answer with a placeholder and set needs_input true.",
         targetComp ? `Salary expectation: use the candidate's target (${targetComp}); keep needs_input true so the candidate confirms it.` : "Salary expectation: no target is set; leave a placeholder and set needs_input true.",
         notice ? `Notice period: ${notice}.` : "Notice period: only state it if the materials say so; otherwise needs_input true.",
-        'Output ONLY a JSON array: [{"id": "...", "answer": "...", "needs_input": false, "note": ""}] with one item per question id given. The note (English) says concretely what is missing or must be checked (not a translation of the question).',
-      ].join("\n"),
+        writingRules ? `Writing rules from the candidate (follow them):\n${writingRules}` : "",
+        'Output ONLY a JSON array: [{"id": "...", "answer": "...", "needs_input": false, "note": ""}] with one item per question id given. The note (in ' + langName(env) + ') says concretely what is missing or must be checked (not a translation of the question).',
+      ].filter(Boolean).join("\n"),
     },
     {
       role: "user",
