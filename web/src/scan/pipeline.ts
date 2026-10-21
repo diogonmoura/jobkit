@@ -381,7 +381,8 @@ async function resolvePosting(url: string, companyFor: (vendor: string, slug: st
     const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(id)}`, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`Greenhouse ${res.status}`);
     const job = (await res.json()) as Record<string, unknown>;
-    const html = String(job.content ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    // &amp; last, so "&amp;lt;" becomes "&lt;" rather than being decoded twice into "<".
+    const html = String(job.content ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
     return {
       externalKey: `greenhouse:${slug}:${id}`,
       company: companyFor("greenhouse", slug),
