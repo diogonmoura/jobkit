@@ -82,3 +82,12 @@ describe("setup SQL", () => {
     }
   });
 });
+
+describe("jobkit_apps updated_at", () => {
+  it("moves on every update, so the engine's sync can tell a web edit happened", async () => {
+    const { readFileSync } = await import("node:fs");
+    const sql = readFileSync(new URL("../../public/setup/jobkit-schema.sql", import.meta.url), "utf8");
+    assert.match(sql, /create trigger jobkit_apps_touch before update on public\.jobkit_apps/);
+    assert.match(sql, /drop trigger if exists jobkit_apps_touch on public\.jobkit_apps/);
+  });
+});

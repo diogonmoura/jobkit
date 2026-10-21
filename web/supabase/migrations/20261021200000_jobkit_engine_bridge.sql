@@ -22,3 +22,16 @@ create table if not exists public.jobkit_sync_state (
   updated_at timestamptz not null default now()
 );
 alter table public.jobkit_sync_state enable row level security;
+
+-- updated_at moves on every change to an application, so the engine's sync can tell that the web app
+-- edited a row between its read and its write, and pull again instead of overwriting it.
+create or replace function public.jobkit_touch_updated_at() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  new.updated_at = now();
+  return new;
+end
+$$;
+drop trigger if exists jobkit_apps_touch on public.jobkit_apps;
+create trigger jobkit_apps_touch before update on public.jobkit_apps
+  for each row execute function public.jobkit_touch_updated_at();
