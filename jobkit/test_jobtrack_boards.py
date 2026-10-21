@@ -232,19 +232,19 @@ class TestMantu(unittest.TestCase):
 
 ITJOBS_PAGE = """
 <ul class="list-unstyled listing">
-<li class="first"><a title="Dellent" href="/empresa/dellent"><img/></a>
+<li class="first"><a title="Northwind" href="/empresa/northwind"><img/></a>
  <div class="list-title"><a class="title" title="Strategy Manager" href="/oferta/518192/strategy-manager">Strategy Manager</a></div>
- <div class="list-name"><a title="Dellent" href="/empresa/dellent">Dellent</a></div>
+ <div class="list-name"><a title="Northwind" href="/empresa/northwind">Northwind</a></div>
  <div class="list-details"> Lisboa <!-- Full-time --> H&iacute;brido </div></li>
 <li ><a href="/empresa/other">Other</a>
- <div class="list-title"><a class="title" href="/oferta/1/mentions-dellent">Mentions Dellent</a></div></li>
-</ul><a href="?q=dellent&amp;page=2">2</a>
+ <div class="list-title"><a class="title" href="/oferta/1/mentions-northwind">Mentions Northwind</a></div></li>
+</ul><a href="?q=northwind&amp;page=2">2</a>
 """
 
 
 class TestItjobs(unittest.TestCase):
     def test_keeps_only_rows_for_the_company(self):
-        postings = b.parse_itjobs(ITJOBS_PAGE, "dellent")
+        postings = b.parse_itjobs(ITJOBS_PAGE, "northwind")
         self.assertEqual([p.title for p in postings], ["Strategy Manager"])
         self.assertEqual(postings[0].location, "Lisboa Híbrido")
         self.assertEqual(postings[0].url, "https://www.itjobs.pt/oferta/518192/strategy-manager")
@@ -252,17 +252,17 @@ class TestItjobs(unittest.TestCase):
     def test_fetch_follows_pages_with_the_crawl_delay(self):
         delays = []
         with mock.patch.object(b, "_request", side_effect=[ITJOBS_PAGE, "<ul></ul>"]) as get:
-            postings = b.fetch_itjobs(w.Source("itjobs", "dellent"), 5, sleep=delays.append)
+            postings = b.fetch_itjobs(w.Source("itjobs", "northwind"), 5, sleep=delays.append)
         self.assertEqual(len(postings), 1)
         self.assertEqual(get.call_count, 2)
         self.assertEqual(delays, [b.ITJOBS_CRAWL_DELAY])
 
     def test_resolves_a_company_page_and_an_offer_page(self):
-        self.assertEqual(str(w.resolve_url("https://www.itjobs.pt/empresa/dellent", fetch=False)), "itjobs:dellent")
+        self.assertEqual(str(w.resolve_url("https://www.itjobs.pt/empresa/northwind", fetch=False)), "itjobs:northwind")
         source = b.resolve_itjobs(
-            "https://www.itjobs.pt/oferta/515071/x", '<a href="/empresa/dellent">Dellent</a>'
+            "https://www.itjobs.pt/oferta/515071/x", '<a href="/empresa/northwind">Northwind</a>'
         )
-        self.assertEqual(str(source), "itjobs:dellent")
+        self.assertEqual(str(source), "itjobs:northwind")
 
 
 class TestLocalConnectors(unittest.TestCase):

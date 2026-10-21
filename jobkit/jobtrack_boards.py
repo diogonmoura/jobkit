@@ -487,7 +487,7 @@ def resolve_mantu(url: str) -> Optional[Source]:
 
 # --- ITJobs.pt (company listings on a Portuguese job board) -----------------------
 #
-# Slug: the company's ITJobs handle, e.g. "dellent". Read from the site's own
+# Slug: the company's ITJobs handle, e.g. "northwind". Read from the site's own
 # search results, keeping only rows linked to that company page. robots.txt
 # asks for a 1-second crawl delay between pages, which is honoured.
 

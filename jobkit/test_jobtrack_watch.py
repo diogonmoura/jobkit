@@ -226,13 +226,13 @@ class TestAdapters(unittest.TestCase):
         self.assertTrue(postings[0].url.startswith("http"))
 
     def test_smartrecruiters_constructs_a_human_url_not_the_api_ref(self):
-        postings = jobtrack_watch.parse_smartrecruiters(_fixture("smartrecruiters.json"), "Visa")
+        postings = jobtrack_watch.parse_smartrecruiters(_fixture("smartrecruiters.json"), "Northwind")
         self.assertTrue(postings)
-        self.assertTrue(postings[0].url.startswith("https://jobs.smartrecruiters.com/Visa/"))
+        self.assertTrue(postings[0].url.startswith("https://jobs.smartrecruiters.com/Northwind/"))
         self.assertNotIn("api.smartrecruiters.com", postings[0].url)
 
     def test_smartrecruiters_uses_name_as_title(self):
-        postings = jobtrack_watch.parse_smartrecruiters(_fixture("smartrecruiters.json"), "Visa")
+        postings = jobtrack_watch.parse_smartrecruiters(_fixture("smartrecruiters.json"), "Northwind")
         self.assertTrue(all(p.title for p in postings))
 
     def test_every_vendor_has_an_adapter(self):
@@ -492,13 +492,13 @@ class TestSmartRecruitersPagination(unittest.TestCase):
 class TestSuccessFactorsAdapter(unittest.TestCase):
     def test_parses_a_single_page_of_rows(self):
         html = _fixture_text("successfactors_page1.html")
-        parser = jobtrack_watch._SuccessFactorsRowParser("https://jobs.edp.com")
+        parser = jobtrack_watch._SuccessFactorsRowParser("https://jobs.northwind.example")
         parser.feed(html)
         self.assertEqual(len(parser.postings), 2)
         first = parser.postings[0]
         self.assertEqual(first.id, "1000000001")
         self.assertEqual(first.title, "Senior HR Business Partner")
-        self.assertEqual(first.url, "https://jobs.edp.com/job/Lisbon-Senior-HR-Business-Partner/1000000001/")
+        self.assertEqual(first.url, "https://jobs.northwind.example/job/Lisbon-Senior-HR-Business-Partner/1000000001/")
         self.assertEqual(first.location, "Lisbon, PT")
         self.assertEqual(first.posted, "Aug 6, 2026")
 
@@ -506,14 +506,14 @@ class TestSuccessFactorsAdapter(unittest.TestCase):
         # Every field renders twice (mobile + desktop echo) with identical
         # text -- this must not produce two postings or concatenated text.
         html = _fixture_text("successfactors_page1.html")
-        parser = jobtrack_watch._SuccessFactorsRowParser("https://jobs.edp.com")
+        parser = jobtrack_watch._SuccessFactorsRowParser("https://jobs.northwind.example")
         parser.feed(html)
         self.assertEqual(len(parser.postings), 2)
         self.assertEqual(parser.postings[0].location, "Lisbon, PT")  # not "Lisbon, PTLisbon, PT"
 
     def test_noresults_fallback_is_flagged(self):
         html = _fixture_text("successfactors_noresults.html")
-        parser = jobtrack_watch._SuccessFactorsRowParser("https://jobs.edp.com")
+        parser = jobtrack_watch._SuccessFactorsRowParser("https://jobs.northwind.example")
         parser.feed(html)
         self.assertTrue(parser.saw_noresults)
 
@@ -524,7 +524,7 @@ class TestSuccessFactorsAdapter(unittest.TestCase):
         pages = {0: _fixture_text("successfactors_noresults.html")}
         with mock.patch.object(jobtrack_watch, "_get_html", side_effect=lambda url, timeout: pages[0]):
             postings = jobtrack_watch._fetch_successfactors_postings(
-                jobtrack_watch.Source("successfactors", "jobs.edp.com"), timeout=5
+                jobtrack_watch.Source("successfactors", "jobs.northwind.example"), timeout=5
             )
         self.assertEqual(postings, [])
 
@@ -538,7 +538,7 @@ class TestSuccessFactorsAdapter(unittest.TestCase):
 
         with mock.patch.object(jobtrack_watch, "_get_html", side_effect=fake_get_html):
             postings = jobtrack_watch._fetch_successfactors_postings(
-                jobtrack_watch.Source("successfactors", "jobs.edp.com"), timeout=5
+                jobtrack_watch.Source("successfactors", "jobs.northwind.example"), timeout=5
             )
         self.assertEqual([p.id for p in postings], ["1000000001", "1000000002", "1000000003"])
         self.assertEqual(len(calls), 2)
@@ -557,7 +557,7 @@ class TestSuccessFactorsAdapter(unittest.TestCase):
 
         with mock.patch.object(jobtrack_watch, "_get_html", side_effect=fake_get_html):
             jobtrack_watch._fetch_successfactors_postings(
-                jobtrack_watch.Source("successfactors", "jobs.edp.com"), timeout=5
+                jobtrack_watch.Source("successfactors", "jobs.northwind.example"), timeout=5
             )
         self.assertEqual(len(calls), 2)
 
@@ -566,7 +566,7 @@ class TestSuccessFactorsAdapter(unittest.TestCase):
             jobtrack_watch, "_fetch_successfactors_postings",
             return_value=[jobtrack_watch.Posting("1", "T", "https://e.x/1", "Lisbon, PT", None)],
         ) as fake:
-            postings = jobtrack_watch.fetch_postings(jobtrack_watch.Source("successfactors", "jobs.edp.com"))
+            postings = jobtrack_watch.fetch_postings(jobtrack_watch.Source("successfactors", "jobs.northwind.example"))
         fake.assert_called_once()
         self.assertEqual(len(postings), 1)
 
@@ -586,12 +586,12 @@ class TestSuccessFactorsRMK(unittest.TestCase):
         )
         self.assertEqual([p.id for p in postings], ["76657", "78939"])  # "Summer Intern" has no id
         first = postings[0]
-        self.assertEqual(first.title, "Head of Global Business Services Hub Portugal (m/f/d)")
+        self.assertEqual(first.title, "Head of Operations (m/f/d)")
         self.assertEqual(
             first.url,
-            "https://jobs.northwind.com/job/Head-of-Global-Business-Services-Hub-Portugal-%28mfd%29/76657-en_US/",
+            "https://jobs.northwind.com/job/Head-of-Operations-%28mfd%29/76657-en_US/",
         )
-        self.assertEqual(first.location, "Porto, PRT, 4150-196")  # <br/> stripped
+        self.assertEqual(first.location, "Porto, PRT, 4000-001")  # <br/> stripped
         self.assertEqual(first.posted, "2026-03-06")
 
     def test_unescapes_html_entities_in_title_and_url(self):
@@ -678,7 +678,7 @@ class TestSuccessFactorsRMK(unittest.TestCase):
         with mock.patch.object(jobtrack_watch, "_get_html", side_effect=pages), mock.patch.object(
             jobtrack_watch, "_post_json"
         ) as fake_post:
-            jobtrack_watch.fetch_postings(jobtrack_watch.Source("successfactors", "jobs.edp.com"))
+            jobtrack_watch.fetch_postings(jobtrack_watch.Source("successfactors", "jobs.northwind.example"))
         fake_post.assert_not_called()
 
     def test_an_api_http_error_surfaces_as_adapter_error(self):
@@ -700,20 +700,20 @@ class TestResolver(unittest.TestCase):
         self.assertEqual((s.vendor, s.slug), ("greenhouse", "remotecom"))
 
     def test_resolves_new_style_greenhouse_url(self):
-        s = jobtrack_watch.resolve_url("https://job-boards.greenhouse.io/stripe/jobs/123", fetch=False)
-        self.assertEqual((s.vendor, s.slug), ("greenhouse", "stripe"))
+        s = jobtrack_watch.resolve_url("https://job-boards.greenhouse.io/northwind/jobs/123", fetch=False)
+        self.assertEqual((s.vendor, s.slug), ("greenhouse", "northwind"))
 
     def test_resolves_lever_url(self):
-        s = jobtrack_watch.resolve_url("https://jobs.lever.co/leverdemo/abc-123", fetch=False)
-        self.assertEqual((s.vendor, s.slug), ("lever", "leverdemo"))
+        s = jobtrack_watch.resolve_url("https://jobs.lever.co/northwind/abc-123", fetch=False)
+        self.assertEqual((s.vendor, s.slug), ("lever", "northwind"))
 
     def test_resolves_ashby_url(self):
         s = jobtrack_watch.resolve_url("https://jobs.ashbyhq.com/umbrella", fetch=False)
         self.assertEqual((s.vendor, s.slug), ("ashby", "umbrella"))
 
     def test_resolves_smartrecruiters_url(self):
-        s = jobtrack_watch.resolve_url("https://jobs.smartrecruiters.com/Visa/744000", fetch=False)
-        self.assertEqual((s.vendor, s.slug), ("smartrecruiters", "Visa"))
+        s = jobtrack_watch.resolve_url("https://jobs.smartrecruiters.com/Northwind/744000", fetch=False)
+        self.assertEqual((s.vendor, s.slug), ("smartrecruiters", "Northwind"))
 
     def test_ignores_scheme_and_www(self):
         s = jobtrack_watch.resolve_url("boards.greenhouse.io/remotecom", fetch=False)
@@ -732,9 +732,9 @@ class TestResolver(unittest.TestCase):
 
     def test_resolves_successfactors_by_content_fingerprint(self):
         html = '<script src="https://career5.successfactors.eu/x.js"></script>'
-        s = jobtrack_watch._resolve_from_html(html, "https://jobs.edp.com/search/")
+        s = jobtrack_watch._resolve_from_html(html, "https://jobs.northwind.example/search/")
         self.assertEqual(s.vendor, "successfactors")
-        self.assertEqual(s.slug, "jobs.edp.com")
+        self.assertEqual(s.slug, "jobs.northwind.example")
 
     def test_successfactors_slug_is_the_pasted_hostname_not_a_path_segment(self):
         # Unlike every host-pattern vendor, SF CSB customers run on their own
@@ -819,17 +819,17 @@ class TestResolver(unittest.TestCase):
         self.assertEqual((s.vendor, s.slug), ("greenhouse", "acme"))
 
     def test_resolves_lever_eu_url(self):
-        s = jobtrack_watch.resolve_url("https://jobs.eu.lever.co/olx/abc-123", fetch=False)
-        self.assertEqual((s.vendor, s.slug), ("lever-eu", "olx"))
+        s = jobtrack_watch.resolve_url("https://jobs.eu.lever.co/northwind/abc-123", fetch=False)
+        self.assertEqual((s.vendor, s.slug), ("lever-eu", "northwind"))
 
     def test_resolves_lever_eu_link_embedded_in_page_html(self):
-        html = '<a href="https://jobs.eu.lever.co/olx/460655c1-7e11-49e8-b8a2-eca7c7ed3008">Apply</a>'
-        s = jobtrack_watch._resolve_from_html(html, "https://careers.olxgroup.com/jobs/")
-        self.assertEqual((s.vendor, s.slug), ("lever-eu", "olx"))
+        html = '<a href="https://jobs.eu.lever.co/northwind/460655c1-7e11-49e8-b8a2-eca7c7ed3008">Apply</a>'
+        s = jobtrack_watch._resolve_from_html(html, "https://careers.northwind.example/jobs/")
+        self.assertEqual((s.vendor, s.slug), ("lever-eu", "northwind"))
 
     def test_lever_eu_does_not_shadow_the_default_lever_host(self):
         # jobs.lever.co (no "eu.") must still resolve to plain "lever", not "lever-eu".
-        s = jobtrack_watch.resolve_url("https://jobs.lever.co/leverdemo/abc-123", fetch=False)
+        s = jobtrack_watch.resolve_url("https://jobs.lever.co/northwind/abc-123", fetch=False)
         self.assertEqual(s.vendor, "lever")
 
 
@@ -1898,11 +1898,11 @@ class TestFollowPosting(unittest.TestCase):
 
     def test_a_supported_posting_adds_the_company_and_seeds_its_postings(self):
         result = jobtrack_watch.follow_posting(
-            "Toggl", "https://jobs.ashbyhq.com/toggl/abc-123", self.wl, self.state, self.TODAY
+            "Globex", "https://jobs.ashbyhq.com/globex/abc-123", self.wl, self.state, self.TODAY
         )
         self.assertEqual(result.outcome, jobtrack_watch.FOLLOWED)
-        self.assertIn("Toggl", [w.company for w in self._watchlist().watches])
-        self.assertEqual(jobtrack_watch.load_state(self.state)["ashby:toggl"].seen_ids, ["1"])
+        self.assertIn("Globex", [w.company for w in self._watchlist().watches])
+        self.assertEqual(jobtrack_watch.load_state(self.state)["ashby:globex"].seen_ids, ["1"])
 
     def test_a_board_already_watched_under_another_name_is_not_added_twice(self):
         result = jobtrack_watch.follow_posting(
@@ -1917,7 +1917,7 @@ class TestFollowPosting(unittest.TestCase):
     def test_an_unsupported_board_is_reported_and_leaves_the_watchlist_alone(self):
         before = jobtrack.read_log(self.wl)
         result = jobtrack_watch.follow_posting(
-            "OutSystems", "https://careers-outsystems.icims.com/jobs/1/job", self.wl,
+            "Initech", "https://careers-initech.icims.com/jobs/1/job", self.wl,
             self.state, self.TODAY,
         )
         self.assertEqual(result.outcome, jobtrack_watch.UNSUPPORTED)
@@ -1927,18 +1927,18 @@ class TestFollowPosting(unittest.TestCase):
     def test_a_board_that_fails_to_fetch_is_still_followed_and_seeds_on_next_poll(self):
         self.fetch.side_effect = jobtrack_watch.AdapterError("down")
         result = jobtrack_watch.follow_posting(
-            "Toggl", "https://jobs.ashbyhq.com/toggl/abc", self.wl, self.state, self.TODAY
+            "Globex", "https://jobs.ashbyhq.com/globex/abc", self.wl, self.state, self.TODAY
         )
         self.assertEqual(result.outcome, jobtrack_watch.FOLLOWED)
-        self.assertNotIn("ashby:toggl", jobtrack_watch.load_state(self.state))
+        self.assertNotIn("ashby:globex", jobtrack_watch.load_state(self.state))
 
     def _app(self, company, posting):
         return jobtrack.Application(company, "PM", self.TODAY, "cv", "applied", self.TODAY, posting)
 
     def test_follow_postings_tries_each_link_once_and_retries_unsupported_on_request(self):
         apps = [
-            self._app("Toggl", "https://jobs.ashbyhq.com/toggl/abc"),
-            self._app("OutSystems", "https://careers-outsystems.icims.com/jobs/1/job"),
+            self._app("Globex", "https://jobs.ashbyhq.com/globex/abc"),
+            self._app("Initech", "https://careers-initech.icims.com/jobs/1/job"),
             self._app("Hooli", "—"),
         ]
         first = jobtrack_watch.follow_postings(apps, self.wl, self.state, self.follows, self.TODAY)
@@ -1948,10 +1948,10 @@ class TestFollowPosting(unittest.TestCase):
         retried = jobtrack_watch.follow_postings(
             apps, self.wl, self.state, self.follows, self.TODAY, retry=True
         )
-        self.assertEqual([r.company for r in retried], ["OutSystems"])
+        self.assertEqual([r.company for r in retried], ["Initech"])
 
     def test_following_records_list_watched_then_unwatchable_companies(self):
-        apps = [self._app("OutSystems", "https://careers-outsystems.icims.com/jobs/1/job")]
+        apps = [self._app("Initech", "https://careers-initech.icims.com/jobs/1/job")]
         jobtrack_watch.follow_postings(apps, self.wl, self.state, self.follows, self.TODAY)
         state = {"ashby:umbrella": jobtrack_watch.SourceState(["a", "b"], "2026-10-13")}
         rows = jobtrack_watch.following_records(
@@ -1961,9 +1961,9 @@ class TestFollowPosting(unittest.TestCase):
         self.assertEqual(by_company["Umbrella"]["status"], "watching")
         self.assertEqual(by_company["Umbrella"]["tracked"], 2)
         self.assertEqual(by_company["Remote"]["status"], "pending")
-        self.assertEqual(by_company["OutSystems"]["status"], "unsupported")
-        self.assertEqual(by_company["OutSystems"]["board"], "iCIMS")
-        self.assertEqual(by_company["OutSystems"]["note"], "Uses iCIMS, which the watcher cannot read yet.")
+        self.assertEqual(by_company["Initech"]["status"], "unsupported")
+        self.assertEqual(by_company["Initech"]["board"], "iCIMS")
+        self.assertEqual(by_company["Initech"]["note"], "Uses iCIMS, which the watcher cannot read yet.")
 
 
 class TestAddFollowsPosting(unittest.TestCase):
@@ -1990,27 +1990,27 @@ class TestAddFollowsPosting(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = jobtrack.main(
-                ["add", "--company", "Toggl", "--role", "Senior PM", "--file", self.log] + list(extra)
+                ["add", "--company", "Globex", "--role", "Senior PM", "--file", self.log] + list(extra)
             )
         return code, out.getvalue(), err.getvalue()
 
     def test_add_with_a_supported_posting_follows_the_company(self):
-        code, out, _ = self._add("--posting", "https://jobs.ashbyhq.com/toggl/abc")
+        code, out, _ = self._add("--posting", "https://jobs.ashbyhq.com/globex/abc")
         self.assertEqual(code, 0)
-        self.assertIn("Following Toggl via ashby:toggl", out)
-        self.assertIn("| Toggl | ashby:toggl |", jobtrack.read_log(self.wl))
+        self.assertIn("Following Globex via ashby:globex", out)
+        self.assertIn("| Globex | ashby:globex |", jobtrack.read_log(self.wl))
         follows = jobtrack_watch.load_follows(os.path.join(self.tmp.name, ".jobkit-follow.json"))
-        self.assertEqual(follows["https://jobs.ashbyhq.com/toggl/abc"]["outcome"], "followed")
+        self.assertEqual(follows["https://jobs.ashbyhq.com/globex/abc"]["outcome"], "followed")
 
     def test_no_follow_leaves_the_watchlist_alone(self):
-        self._add("--posting", "https://jobs.ashbyhq.com/toggl/abc", "--no-follow")
-        self.assertNotIn("Toggl", jobtrack.read_log(self.wl))
+        self._add("--posting", "https://jobs.ashbyhq.com/globex/abc", "--no-follow")
+        self.assertNotIn("Globex", jobtrack.read_log(self.wl))
 
     def test_an_unsupported_board_still_adds_the_application(self):
         code, out, _ = self._add("--posting", "https://careers-acme.icims.com/jobs/1/job")
         self.assertEqual(code, 0)
-        self.assertIn("Added Toggl", out)
-        self.assertIn("Not following Toggl", out)
+        self.assertIn("Added Globex", out)
+        self.assertIn("Not following Globex", out)
         self.assertIn("No connector for this board yet; build one", out)
 
 
@@ -2024,9 +2024,9 @@ class TestGreenhouseEmbed(unittest.TestCase):
 class TestAshbyBoards(unittest.TestCase):
     def test_a_slug_with_a_domain_keeps_the_domain(self):
         source = jobtrack_watch.resolve_url(
-            "https://jobs.ashbyhq.com/happyrobot.ai/fe93?src=Linkedin", fetch=False
+            "https://jobs.ashbyhq.com/northwind.ai/fe93?src=Linkedin", fetch=False
         )
-        self.assertEqual(str(source), "ashby:happyrobot.ai")
+        self.assertEqual(str(source), "ashby:northwind.ai")
 
     def test_a_404_from_the_public_api_falls_back_to_the_board_query(self):
         board = {"data": {"jobBoard": {"jobPostings": [
@@ -2052,9 +2052,9 @@ class TestAshbyBoards(unittest.TestCase):
             return R(board)
 
         with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            postings = jobtrack_watch.fetch_postings(jobtrack_watch.Source("ashby", "toggl"))
+            postings = jobtrack_watch.fetch_postings(jobtrack_watch.Source("ashby", "globex"))
         self.assertEqual([(p.id, p.title, p.location) for p in postings], [("a1", "Senior PM", "Remote")])
-        self.assertEqual(postings[0].url, "https://jobs.ashbyhq.com/toggl/a1")
+        self.assertEqual(postings[0].url, "https://jobs.ashbyhq.com/globex/a1")
 
     def test_a_missing_board_is_an_adapter_error(self):
         with self.assertRaises(jobtrack_watch.AdapterError):
@@ -2068,15 +2068,15 @@ class TestUnknownLocation(unittest.TestCase):
 
 
 class TestWorkdayAdapter(unittest.TestCase):
-    SLUG = "outsystems.wd503.myworkdayjobs.com/outsystems/OutSystems"
+    SLUG = "northwind.wd503.myworkdayjobs.com/northwind/Northwind"
 
     def test_parses_postings_and_builds_board_links(self):
         postings = jobtrack_watch.parse_workday(_fixture("workday.json"), self.SLUG)
-        self.assertEqual([p.title for p in postings], ["Digital Transformation Lead", "Strategy Manager"])
+        self.assertEqual([p.title for p in postings], ["Data Engineer", "Support Manager"])
         self.assertEqual(
             postings[0].url,
-            "https://outsystems.wd503.myworkdayjobs.com/OutSystems/job/Portugal---Lisbon/"
-            "Digital-Transformation-Lead_R1628",
+            "https://northwind.wd503.myworkdayjobs.com/Northwind/job/Portugal---Lisbon/"
+            "Data-Engineer_R1628",
         )
         self.assertEqual(postings[0].location, "Portugal - Lisbon")
 
@@ -2104,8 +2104,8 @@ class TestWorkdayAdapter(unittest.TestCase):
 
     def test_resolves_job_links_with_and_without_a_locale(self):
         for url in (
-            "https://outsystems.wd503.myworkdayjobs.com/OutSystems/job/Portugal---Lisbon/X_R1628",
-            "https://outsystems.wd503.myworkdayjobs.com/en-US/OutSystems",
+            "https://northwind.wd503.myworkdayjobs.com/Northwind/job/Portugal---Lisbon/X_R1628",
+            "https://northwind.wd503.myworkdayjobs.com/en-US/Northwind",
         ):
             self.assertEqual(str(jobtrack_watch.resolve_url(url, fetch=False)), "workday:" + self.SLUG)
 
@@ -2126,18 +2126,18 @@ class TestWorkdayAdapter(unittest.TestCase):
 
 
 class TestTaleoAdapter(unittest.TestCase):
-    SLUG = "lde.tbe.taleo.net/lde02/BARHOLD/37"
+    SLUG = "lde.tbe.taleo.net/lde02/NORTHWIND/37"
 
     def test_parses_requisitions_from_the_rss_feed(self):
         postings = jobtrack_watch.parse_taleo(_fixture_text("taleo.rss"), self.SLUG)
         self.assertEqual([p.id for p in postings], ["5211", "5119"])
         first = postings[0]
-        self.assertEqual(first.title, "Strategy & Transformation Manager")
+        self.assertEqual(first.title, "Operations Manager")
         self.assertEqual(first.location, "Portugal - Headquarters - Oporto, PT")
         self.assertEqual(first.posted, "2026-10-14")
         self.assertEqual(
             first.url,
-            "https://lde.tbe.taleo.net/lde02/ats/careers/v2/viewRequisition?org=BARHOLD&cws=37&rid=5211",
+            "https://lde.tbe.taleo.net/lde02/ats/careers/v2/viewRequisition?org=NORTHWIND&cws=37&rid=5211",
         )
         self.assertIsNone(postings[1].posted)
         self.assertEqual(postings[1].location, "Italy - Stores")
@@ -2148,7 +2148,7 @@ class TestTaleoAdapter(unittest.TestCase):
 
     def test_resolves_a_requisition_link(self):
         source = jobtrack_watch.resolve_url(
-            "https://lde.tbe.taleo.net/lde02/ats/careers/v2/viewRequisition?org=BARHOLD&cws=37&rid=5168",
+            "https://lde.tbe.taleo.net/lde02/ats/careers/v2/viewRequisition?org=NORTHWIND&cws=37&rid=5168",
             fetch=False,
         )
         self.assertEqual(str(source), "taleo:" + self.SLUG)

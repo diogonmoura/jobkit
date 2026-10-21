@@ -11,8 +11,8 @@
       "defaultJobAd": true,
       "refNumber": "REF97395W",
       "company": {
-        "identifier": "Visa",
-        "name": "Visa"
+        "identifier": "Northwind",
+        "name": "Northwind"
       },
       "releasedDate": "2026-06-24T10:00:11.853Z",
       "location": {
@@ -60,15 +60,15 @@
         },
         {
           "fieldId": "5bd89e45b1f60b7aea922c5b",
-          "fieldLabel": "Visa Inc. or Visa in Europe job?",
+          "fieldLabel": "Which entity?",
           "valueId": "3a568048-d1c9-4741-be56-36b4f3addff7",
-          "valueLabel": "Visa Inc."
+          "valueLabel": "Northwind Inc."
         },
         {
           "fieldId": "58914413e4b04f807e6ee84f",
           "fieldLabel": "Brands",
           "valueId": "default",
-          "valueLabel": "Visa"
+          "valueLabel": "Northwind"
         },
         {
           "fieldId": "57ac0c81e4b06e7ab19310e1",
@@ -78,7 +78,7 @@
         }
       ],
       "visibility": "PUBLIC",
-      "ref": "https://api.smartrecruiters.com/v1/companies/Visa/postings/744000133907678",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Northwind/postings/744000133907678",
       "language": {
         "code": "en",
         "label": "English",
@@ -93,8 +93,8 @@
       "defaultJobAd": true,
       "refNumber": "REF97388Z",
       "company": {
-        "identifier": "Visa",
-        "name": "Visa"
+        "identifier": "Northwind",
+        "name": "Northwind"
       },
       "releasedDate": "2026-06-03T11:08:12.368Z",
       "location": {
@@ -142,15 +142,15 @@
         },
         {
           "fieldId": "5bd89e45b1f60b7aea922c5b",
-          "fieldLabel": "Visa Inc. or Visa in Europe job?",
+          "fieldLabel": "Which entity?",
           "valueId": "3a568048-d1c9-4741-be56-36b4f3addff7",
-          "valueLabel": "Visa Inc."
+          "valueLabel": "Northwind Inc."
         },
         {
           "fieldId": "58914413e4b04f807e6ee84f",
           "fieldLabel": "Brands",
           "valueId": "default",
-          "valueLabel": "Visa"
+          "valueLabel": "Northwind"
         },
         {
           "fieldId": "57ac0c81e4b06e7ab19310e1",
@@ -160,7 +160,7 @@
         }
       ],
       "visibility": "PUBLIC",
-      "ref": "https://api.smartrecruiters.com/v1/companies/Visa/postings/744000129971988",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Northwind/postings/744000129971988",
       "language": {
         "code": "en",
         "label": "English",
