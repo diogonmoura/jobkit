@@ -12,6 +12,7 @@ import {
 } from "./preferences";
 import { runJobScan, importJobs } from "./scan/pipeline";
 import { recheckJobs } from "./scan/suitability";
+import { resolveBoardUrl, addBoard } from "./watchlist";
 import { generateJobCv } from "./job-cv";
 import { generateJobAnswers } from "./job-answers";
 import { loadExperience } from "./experience";
@@ -118,6 +119,21 @@ export async function handleApi(
     if (path === "/scan" && request.method === "POST") {
       const result = await runJobScan(env, supabase, userId, "manual", request);
       return jsonResponse({ ok: true, ...result }, {}, pending);
+    }
+
+    // Watchlist: detect + test a pasted careers/board URL, then add it.
+    if (path === "/watchlist/resolve" && request.method === "POST") {
+      const body = (await request.json().catch(() => ({}))) as { url?: string };
+      try {
+        return jsonResponse({ ok: true, ...(await resolveBoardUrl(env, userId, request, String(body.url ?? ""))) }, {}, pending);
+      } catch (e) {
+        return jsonResponse({ error: e instanceof Error ? e.message : String(e) }, { status: 422 }, pending);
+      }
+    }
+    if (path === "/watchlist/add" && request.method === "POST") {
+      const body = (await request.json().catch(() => ({}))) as { vendor?: string; slug?: string; company?: string; hq?: string; industry?: string };
+      const row = await addBoard(supabase, userId, { vendor: String(body.vendor ?? ""), slug: String(body.slug ?? ""), company: String(body.company ?? ""), hq: body.hq, industry: body.industry });
+      return jsonResponse({ ok: true, target: row }, {}, pending);
     }
 
     // Re-check stored jobs against the role constraints (cached per job unless the rules change or force=true).

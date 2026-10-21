@@ -18,6 +18,7 @@ import {
 /** Cloudflare free plan allows 50 subrequests per invocation; ~20 go to Supabase/LLM, the rest to job boards. Targets rotate. */
 const MAX_TARGETS_PER_RUN = 22;
 /** Default minimum score for the daily scan (profile.min_score overrides it). */
+const MAX_PER_COMPANY = 5;
 const MIN_SCORE = 50;
 
 function homeLabel(profile: PreferenceProfile): string {
@@ -285,8 +286,16 @@ export async function runJobScan(
     if (a.posting) urls.add(String(a.posting).split("?")[0].toLowerCase());
   }
 
+  const perCompany = new Map<string, number>();
   const candidates = dedupeOpenings(prefFiltered, keys, urls)
     .filter((o) => !(profile.exclude_engineering_titles && isEngineeringTitle(o.title)))
+    // Cap per company so one large board can't crowd out the others in the scoring batch.
+    .filter((o) => {
+      const k = o.company.toLowerCase();
+      const n = (perCompany.get(k) ?? 0) + 1;
+      perCompany.set(k, n);
+      return n <= MAX_PER_COMPANY;
+    })
     .slice(0, 30);
   const scored: { opening: RawOpening; score: number; reason: string; breakdown: ScoreBreakdown | null; flags: string[] }[] = [];
   if (candidates.length) {

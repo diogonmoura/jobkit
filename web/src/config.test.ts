@@ -58,3 +58,11 @@ test("engineering titles are pre-filtered unless clearly product or ops", async 
   for (const t of ["Product Engineer", "Senior AI Engineer", "Full-Stack Engineer", "Principal ML Platform Engineer", "Software Developer", "Staff Solutions Architect"].slice(0, 5)) assert.ok(isEngineeringTitle(t), t);
   for (const t of ["Product Manager, Engineering", "Head of AI Native Operations", "Chief of Staff", "Senior Product Manager", "AI Ops Lead", "Product Lead, Infrastructure", "Engineering Manager"]) assert.ok(!isEngineeringTitle(t), t);
 });
+
+test("careers pages with an embedded job board are detected", async () => {
+  const { findEmbeddedBoard } = await import("./watchlist");
+  assert.deepEqual(findEmbeddedBoard('<script src="https://boards.greenhouse.io/embed/job_board/js?for=acme"></script>'), { vendor: "greenhouse", slug: "acme" });
+  assert.deepEqual(findEmbeddedBoard('<a href="https://jobs.ashbyhq.com/acme-co">All jobs</a>'), { vendor: "ashby", slug: "acme-co" });
+  assert.deepEqual(findEmbeddedBoard('<a href="https://jobs.eu.lever.co/acme/123">x</a>'), { vendor: "lever-eu", slug: "acme" });
+  assert.equal(findEmbeddedBoard("<p>no board here</p>"), null);
+});

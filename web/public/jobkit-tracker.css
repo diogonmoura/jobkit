@@ -706,3 +706,31 @@ td.co .co-line{align-items:center}
 .job-chip--filtered{color:var(--mf-text);border-color:color-mix(in srgb,var(--mf-text) 25%,transparent);background:color-mix(in srgb,var(--mf-text) 6%,transparent)}
 #toggle-filtered[aria-pressed="true"]{background:color-mix(in srgb,var(--mf-accent) 12%,transparent)}
 [data-pills="pref-constraints"] .pill{border-radius:12px;padding:.35rem .35rem .35rem .7rem;line-height:1.45}
+/* Watchlist management */
+.co-chip--ind{background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.28)}
+.wl-add{padding:14px 16px;margin-bottom:12px;display:grid;gap:8px}
+.wl-add__label{font-weight:600;font-size:.9rem}
+.wl-add__row{display:flex;gap:8px}
+.wl-add__row input{flex:1;min-width:0}
+.wl-add input,.wl-in{padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.55);font:inherit;color:inherit;min-width:0;backdrop-filter:blur(6px)}
+.wl-add__msg{margin:0;font-size:.88rem}
+.wl-add__msg.is-ok{color:#1f7a4d}.wl-add__msg.is-err{color:#b3261e}.wl-add__msg.is-warn{color:#8a5a00}.wl-add__msg.is-busy{opacity:.75}
+.wl-preview__fields{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px}
+.wl-preview__fields label{display:grid;gap:4px;font-size:.8rem;opacity:.9}
+.wl-preview__foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;font-size:.82rem;flex-wrap:wrap}
+.watch--targets li{grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) auto minmax(0,.6fr) auto auto}
+.wl-actions{display:flex;gap:4px;justify-content:flex-end}
+.wl-btn{font:inherit;font-size:.78rem;padding:4px 10px;border-radius:999px;cursor:pointer}
+.wl-btn--ghost,.wl-btn--danger{background:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.45);color:inherit}
+.wl-btn--danger{color:#b3261e}
+.wl-btn:hover{background:rgba(255,255,255,.7)}
+.watch--targets li.wl-edit{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto}
+.wl-edit .co-line input{flex:1}
+.wl-undo{margin-left:8px;font:inherit;font-weight:600;background:none;border:0;text-decoration:underline;cursor:pointer;color:inherit}
+@media (max-width:560px){
+  .wl-preview__fields{grid-template-columns:1fr}
+  .watch--targets li{grid-template-columns:minmax(0,1fr) auto}
+  .watch--targets .board,.watch--targets .num{display:none}
+  .wl-actions{grid-column:1/-1;order:4;justify-content:flex-start}
+  .watch--targets li.wl-edit{grid-template-columns:1fr}
+}
