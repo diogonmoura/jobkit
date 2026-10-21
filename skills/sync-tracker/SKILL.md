@@ -1,9 +1,17 @@
 ---
 name: sync-tracker
-description: Use when applications.md changed in a session, at the start of a session that touches the tracker, or when the user wants their application tracker artifact (a shareable dashboard on claude.ai) set up or refreshed.
+description: Use when applications.md changed in a session, at the start of a session that touches the tracker, or when the user wants their application tracker (a claude.ai artifact dashboard or the hosted web app) set up or refreshed.
 ---
 
-# Sync with the tracker artifact
+# Sync with the tracker
+
+Read `[tracker] backend` in `jobkit.toml` (no `backend` but an `artifact_url` means `artifact`).
+
+## Hosted web app (`backend = "web"`)
+
+Run `python3 ~/.jobkit/launcher.py sync web` from the data repo and report what it printed: whether `applications.md` changed and how many applications were pushed. On `error: ...` relay the reason (a missing `SUPABASE_SECRET_KEY` or `supabase_url` is the usual one). The rest of this skill is the artifact tracker only.
+
+# Artifact tracker
 
 `applications.md` and the tracker artifact (database collections `apps` and `following`) are kept in two-way sync. The artifact database is only reachable from a Claude session (the ArtifactData tool), so this skill runs the transport and the engine does the merge. Run engine commands as `python3 ~/.jobkit/launcher.py <command>` from the data repo; use a scratch directory for the exports.
 

@@ -102,3 +102,101 @@ class TestDoctor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+TRACKER_MD = """# Applications
+
+| Company | Role | Applied | CV | Status | Last contact | Posting |
+|---|---|---|---|---|---|---|
+| Acme | PM | 2026-09-01 | cv_acme | applied | 2026-09-01 | — |
+
+## Events
+"""
+
+
+class TestWebAutoSync(unittest.TestCase):
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.toml('[tracker]\nbackend = "web"\nsupabase_url = "https://ref.supabase.co"\n')
+        with open(os.path.join(self.home, "applications.md"), "w", encoding="utf-8") as handle:
+            handle.write(TRACKER_MD)
+        self.calls, self.error = [], None
+        owner = mock.Mock()
+        owner.owner_id.return_value = "u-1"
+
+        def fake_sync(client, user_id, md_path, machine, attempts=3):
+            self.calls.append((user_id, os.path.basename(md_path)))
+            if self.error:
+                raise self.error
+            return {"md_changed": False, "pushed": 0, "records": 1}
+
+        for target, kwargs in (("jobtrack_sync.sync_web", {"side_effect": fake_sync}),
+                               ("jobkit_web.client_from_config", {"return_value": owner})):
+            patcher = mock.patch(target, **kwargs)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def toml(self, text):
+        with open(os.path.join(self.home, "jobkit.toml"), "w", encoding="utf-8") as handle:
+            handle.write(text)
+
+    def add(self):
+        return run(["add", "--company", "Beta", "--role", "CoS", "--no-follow"], self.home)
+
+    def test_add_syncs_before_and_after(self):
+        code, _, _ = self.add()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.calls, [("u-1", "applications.md")] * 2)
+
+    def test_stats_syncs_only_before(self):
+        run(["stats"], self.home)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_render_and_artifact_backend_never_sync(self):
+        run(["render", os.path.join(self.home, "missing.md")], self.home)
+        self.toml('[tracker]\nartifact_url = "https://claude.ai/artifact/x"\n')
+        self.add()
+        self.assertEqual(self.calls, [])
+
+    def test_offline_warns_once_and_the_command_still_runs(self):
+        import jobkit_web
+
+        self.error = jobkit_web.WebError("timed out")
+        code, _, err = self.add()
+        self.assertEqual(code, 0)
+        self.assertEqual(err.count("warning: could not sync with the web app (timed out); "
+                                   "using local applications.md"), 1)
+        with open(os.path.join(self.home, "applications.md"), encoding="utf-8") as handle:
+            self.assertIn("| Beta | CoS |", handle.read())
+
+    def test_sync_web_command_reports_and_fails_loudly(self):
+        code, out, _ = run(["sync", "web"], self.home)
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["records"], 1)
+        import jobkit_web
+
+        self.error = jobkit_web.WebError("HTTP 401")
+        code, _, err = run(["sync", "web"], self.home)
+        self.assertEqual(code, 1)
+        self.assertIn("error: HTTP 401", err)
+
+
+class TestPushPostingsCommand(unittest.TestCase):
+    def test_push_postings_uses_the_owner_and_reports(self):
+        home = tempfile.mkdtemp()
+        with open(os.path.join(home, "jobkit.toml"), "w", encoding="utf-8") as handle:
+            handle.write('[tracker]\nbackend = "web"\nsupabase_url = "https://ref.supabase.co"\n')
+        with open(os.path.join(home, "applications.md"), "w", encoding="utf-8") as handle:
+            handle.write(TRACKER_MD)
+        with open(os.path.join(home, "watchlist.md"), "w", encoding="utf-8") as handle:
+            handle.write("# Watchlist\n\n| Company | Source | Keywords | Location | Added |\n|---|---|---|---|---|\n"
+                         "| EDP | successfactors:jobs.edp.com | — | — | 2026-08-06 |\n")
+        client = mock.Mock()
+        client.owner_id.return_value = "u-1"
+        result = {"pushed": 3, "boards": 1, "skipped_web_boards": 0, "errors": []}
+        with mock.patch("jobkit_web.client_from_config", return_value=client), \
+                mock.patch("jobtrack_watch.push_postings", return_value=result) as push:
+            code, out, _ = run(["watch", "push-postings"], home)
+        self.assertEqual(code, 0)
+        self.assertEqual(push.call_args[0][2], "u-1")
+        self.assertEqual(json.loads(out), result)

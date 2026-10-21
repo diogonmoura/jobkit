@@ -1,0 +1,46 @@
+# Daily bridge between your data repo and the hosted tracker (web/), run by GitHub Actions.
+# Copy to .github/workflows/jobkit-daily.yml in your private data repo, set [tracker] backend = "web"
+# and supabase_url in jobkit.toml, and add the SUPABASE_SECRET_KEY repository secret.
+# It runs before the web app's 07:00 UTC scan, which then scores the postings this sends.
+name: jobkit daily
+
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jobkit-daily
+  cancel-in-progress: false
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      # Each machine keeps its own sync snapshot in the web app; this names the Action's.
+      JOBKIT_MACHINE: github-actions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Get jobkit
+        run: git clone --depth 1 https://github.com/diogonmoura/jobkit.git "$RUNNER_TEMP/jobkit"
+      - name: Send postings from boards the web app can't read
+        run: python3 "$RUNNER_TEMP/jobkit/jobkit/cli.py" watch push-postings
+      - name: Sync applications.md with the web app
+        run: python3 "$RUNNER_TEMP/jobkit/jobkit/cli.py" sync web
+      - name: Commit applications.md
+        run: |
+          if ! git diff --quiet -- applications.md; then
+            git config user.name "jobkit-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add applications.md
+            git commit -m "Sync applications.md with the web app"
+            git push
+          fi

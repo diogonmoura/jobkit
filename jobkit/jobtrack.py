@@ -746,6 +746,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--retry", action="store_true", help="re-try postings whose board was unsupported"
     )
 
+    watch_actions.add_parser(
+        "push-postings", help="send postings from boards the web app can't read to the web app"
+    )
+
     w_poll = watch_actions.add_parser("poll", help="fetch and notify on new roles")
     w_poll.add_argument("--dry-run", action="store_true", dest="dry_run")
 
@@ -859,6 +863,21 @@ def main(argv: Optional[List[str]] = None) -> int:
                             "Warning: that board returned zero postings. The slug may be wrong.",
                             file=sys.stderr,
                         )
+                    return 0
+
+                if args.watch_action == "push-postings":
+                    import jobkit_config
+                    import jobkit_web
+
+                    try:
+                        client = jobkit_web.client_from_config(jobkit_config.load())
+                        result = jobtrack_watch.push_postings(
+                            jobtrack_watch.parse_watchlist(_load(wl_path)), client, client.owner_id()
+                        )
+                    except jobkit_web.WebError as error:
+                        print("error: {}".format(error), file=sys.stderr)
+                        return 1
+                    print(json.dumps(result))
                     return 0
 
                 if args.watch_action == "follow-postings":
