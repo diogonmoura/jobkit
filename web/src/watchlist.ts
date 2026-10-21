@@ -36,7 +36,7 @@ async function boardName(vendor: string, slug: string): Promise<string> {
   }
 }
 
-export type ResolvedBoard = { vendor: string; slug: string; company: string; jobs: number; hq: string; industry: string; costUsd: number };
+export type ResolvedBoard = { vendor: string; slug: string; company: string; jobs: number; hq: string; industry: string; costUsd: number; suggestError?: string };
 
 /** Paste a careers or board URL: detect the ATS, test-fetch it, and suggest name/HQ/industry (cheap model, may be blank). */
 export async function resolveBoardUrl(env: Env, userId: string, request: Request | null, url: string): Promise<ResolvedBoard> {
@@ -64,6 +64,7 @@ export async function resolveBoardUrl(env: Env, userId: string, request: Request
   let hq = "";
   let industry = "";
   let costUsd = 0;
+  let suggestError = "";
   try {
     const r = await completeChat(env, {
       request,
@@ -85,10 +86,10 @@ export async function resolveBoardUrl(env: Env, userId: string, request: Request
     company = String(j.name ?? "").trim().slice(0, 80) || company;
     hq = String(j.hq ?? "").trim().slice(0, 60);
     industry = String(j.industry ?? "").trim().slice(0, 40);
-  } catch {
-    /* suggestions are optional */
+  } catch (e) {
+    suggestError = e instanceof Error ? e.message.slice(0, 200) : String(e);
   }
-  return { ...parsed, company, jobs, hq, industry, costUsd };
+  return { ...parsed, company, jobs, hq, industry, costUsd, ...(suggestError ? { suggestError } : {}) };
 }
 
 export async function addBoard(supabase: SupabaseClient, userId: string, b: { vendor: string; slug: string; company: string; hq?: string; industry?: string }) {
