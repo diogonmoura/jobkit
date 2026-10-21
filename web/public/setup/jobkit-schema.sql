@@ -404,5 +404,12 @@ alter table public.jobkit_scan_targets drop constraint if exists jobkit_scan_tar
 alter table public.jobkit_scan_targets add constraint jobkit_scan_targets_vendor_check
   check (vendor in ('greenhouse', 'lever', 'lever-eu', 'ashby', 'workable', 'remote-com', 'teamtailor'));
 
+-- ===== supabase/migrations/20261021190000_jobkit_settings_anthropic.sql =====
+-- Claude (the Anthropic API) joins the LLM providers chosen in /setup.
+alter table public.jobkit_settings drop constraint if exists jobkit_settings_provider_check;
+alter table public.jobkit_settings drop constraint if exists jobkit_settings_provider_check;
+alter table public.jobkit_settings add constraint jobkit_settings_provider_check
+  check (llm_provider in ('openrouter', 'openai', 'anthropic', 'custom'));
+
 -- Tell the Data API (PostgREST) about the new tables.
 notify pgrst, 'reload schema';

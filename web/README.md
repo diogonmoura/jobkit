@@ -31,7 +31,7 @@ Then follow the wizard:
 
 1. **Database**: paste the Project URL, publishable key and secret key (*Project Settings → API Keys*). The wizard tests them and prints the `.dev.vars` lines (including a freshly generated `SETTINGS_ENC_KEY`). Restart `npm run dev`, then run the setup SQL it offers (`/setup/jobkit-schema.sql`) in the Supabase SQL editor and click **Check again**.
 2. **Account**: create your account. The first account becomes the owner; nobody else can open the app. Afterwards, turn off new sign-ups in Supabase (*Authentication → Sign In / Providers*).
-3. **AI model**: choose OpenRouter (default), OpenAI or another OpenAI-compatible endpoint, paste the key, **Test & save**. The key is validated, encrypted with AES-GCM using `SETTINGS_ENC_KEY` and stored in `jobkit_settings`, readable only by the Worker.
+3. **AI model**: choose OpenRouter (default), OpenAI, Claude (an Anthropic API key from console.anthropic.com; a Claude subscription can't be used) or another OpenAI-compatible endpoint, paste the key, **Test & save**. The key is validated, encrypted with AES-GCM using `SETTINGS_ENC_KEY` and stored in `jobkit_settings`, readable only by the Worker.
 4. **Preferences**: target roles by tier, seniority, focus, keywords, home location and remote rule, right to work, company types to exclude or flag, salary floor, anything else that matters, the scoring weights, companies to watch (names or board links; jobkit finds their public boards), and optionally your Master CV and experience notes.
 5. **Finish**: opens the tracker.
 

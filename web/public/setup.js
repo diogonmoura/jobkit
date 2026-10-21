@@ -123,8 +123,8 @@ function renderLlm() {
 function syncProvider() {
   const p = document.querySelector("input[name=prov]:checked").value;
   $("llm-base-wrap").hidden = p !== "custom";
-  $("llm-model").placeholder = p === "openai" ? "gpt-4o-mini" : p === "custom" ? "model id" : "google/gemini-2.5-flash";
-  $("llm-key").placeholder = p === "openrouter" ? "sk-or-…" : p === "openai" ? "sk-…" : "API key";
+  $("llm-model").placeholder = p === "openai" ? "gpt-4o-mini" : p === "anthropic" ? "claude-haiku-5-5 / claude-opus-5-5" : p === "custom" ? "model id" : "google/gemini-2.5-flash";
+  $("llm-key").placeholder = p === "openrouter" ? "sk-or-…" : p === "openai" ? "sk-…" : p === "anthropic" ? "sk-ant-…" : "API key";
 }
 
 async function refresh() {
