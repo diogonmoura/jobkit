@@ -641,3 +641,49 @@ html[data-theme="dark"] .job-applied__badge{color:#7ee2a8}
   tr.detail td { padding: var(--mf-space-3) 0; }
   tr.detail td > * { position: sticky; left: var(--mf-space-3); width: calc(var(--jk-wrap-w, 100vw) - 2 * var(--mf-space-3)); box-sizing: border-box; }
 }
+
+/* Company logos (logo.dev, with the initial as fallback) */
+.co-logo{position:relative;flex:none;display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;overflow:hidden;
+  background:color-mix(in srgb,var(--mf-accent) 14%,var(--mf-glass-fill,transparent));border:1px solid var(--mf-glass-border,var(--mf-border));
+  color:var(--mf-accent);font-size:.8rem;font-weight:var(--mf-weight-semibold,600);line-height:1;vertical-align:middle}
+.co-logo--lg{width:40px;height:40px;font-size:1rem}
+.co-logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;opacity:0;transition:opacity var(--mf-duration-fast,.15s) ease}
+.co-logo.has-img img{opacity:1}
+.co-logo.has-img .co-logo__initial{visibility:hidden}
+.co-line{display:flex;align-items:center;gap:.6rem;min-width:0}
+.co-line > span:last-child{min-width:0}
+.job-card__title{display:flex;align-items:flex-start;gap:.7rem;min-width:0;flex:1}
+.job-card__title > div{min-width:0;flex:1}
+td.co .co-line{align-items:center}
+.watch .co.co-line{font-weight:var(--mf-weight-semibold)}
+
+/* Thumbs: small and quiet, shown on hover/focus; always visible (but faint) on touch screens; gone once used */
+.job-card{position:relative}
+.job-vote{display:inline-flex;gap:2px;margin-left:auto;align-self:flex-start;opacity:0;transition:opacity var(--mf-duration-fast,.15s) ease}
+.job-card:hover .job-vote,.job-card:focus-within .job-vote{opacity:1}
+@media (hover:none){.job-vote{opacity:.7}}
+.job-vote button{appearance:none;border:1px solid transparent;background:transparent;border-radius:999px;width:30px;height:30px;padding:0;
+  font-size:.95rem;line-height:1;cursor:pointer;filter:grayscale(1);opacity:.75;transition:all var(--mf-duration-fast,.15s) ease}
+.job-vote button:hover,.job-vote button:focus-visible{filter:none;opacity:1;background:var(--mf-glass-fill,transparent);border-color:var(--mf-glass-border,var(--mf-border))}
+.job-vote button:focus-visible{outline:2px solid var(--mf-accent);outline-offset:1px}
+
+/* Collapsible sections in details */
+.jk-section{border:1px solid var(--mf-glass-border,var(--mf-border));border-radius:12px;background:var(--mf-glass-fill,transparent);margin:.5rem 0;min-width:0}
+.jk-section > summary{cursor:pointer;list-style:none;padding:.55rem .8rem;font-weight:var(--mf-weight-semibold,600);font-size:var(--mf-text-sm,.9rem);display:flex;align-items:center;gap:.5rem}
+.jk-section > summary::-webkit-details-marker{display:none}
+.jk-section > summary::before{content:"›";display:inline-block;transition:transform var(--mf-duration-fast,.15s) ease;color:var(--mf-text-muted)}
+.jk-section[open] > summary::before{transform:rotate(90deg)}
+.jk-section > summary .mf-muted{font-weight:400}
+.jk-section__body{padding:0 .8rem .8rem;min-width:0}
+
+/* Preferences: list fields as removable chips */
+.pill-input{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;padding:.4rem .5rem;min-height:2.6rem;border-radius:12px;
+  border:1px solid var(--mf-glass-border,var(--mf-border));background:var(--mf-glass-fill,transparent);cursor:text}
+.pill-input:focus-within{border-color:var(--mf-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--mf-accent) 18%,transparent)}
+.pill{display:inline-flex;align-items:center;gap:.2rem;padding:.15rem .25rem .15rem .6rem;border-radius:999px;font-size:.8rem;line-height:1.4;
+  background:color-mix(in srgb,var(--mf-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--mf-accent) 28%,transparent);color:var(--mf-text);max-width:100%;overflow-wrap:anywhere}
+.pill button{appearance:none;border:0;background:transparent;color:var(--mf-text-muted);cursor:pointer;width:18px;height:18px;border-radius:50%;padding:0;font-size:.9rem;line-height:1;display:inline-grid;place-items:center}
+.pill button:hover,.pill button:focus-visible{background:color-mix(in srgb,var(--mf-text) 12%,transparent);color:var(--mf-text)}
+.pill-input input.pill-input__field{flex:1;min-width:8rem;border:0;background:transparent;outline:0;box-shadow:none;padding:.2rem;font:inherit;color:inherit;width:auto}
+.pref-hint{font-size:var(--mf-text-xs,.78rem);color:var(--mf-text-muted);font-weight:400}
+.pref-grid{align-items:start}

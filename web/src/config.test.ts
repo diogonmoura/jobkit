@@ -1,4 +1,6 @@
 import { test } from "node:test";
+import { localizeFlag } from "../public/jobkit-flags.js";
+import { companyDomain, domainMap } from "../public/jobkit-logo.js";
 import assert from "node:assert/strict";
 import { standardFlags, rubricText } from "./scan/pipeline";
 import { normalizeProfile } from "./preferences";
@@ -29,6 +31,20 @@ test("server labels follow JOBKIT_LANG", () => {
   assert.match(tr(pt, "Confirm you can work remotely from Porto, Portugal (local entity, EOR or contractor)"), /^Confirmar elegibilidade remota a partir de Porto, Portugal/);
   assert.equal(tr({} as Env, "Added manually"), "Added manually");
   assert.match(langName(pt), /European Portuguese/);
+});
+
+test("stored flags are re-translated to the UI language", () => {
+  assert.equal(localizeFlag("Verificar cláusula de não concorrência / atividades externas", "en"), "Check the non-compete / outside-activities clause");
+  assert.equal(localizeFlag("Confirmar elegibilidade remota PT (entidade UE/EOR/contractor)", "en"), "Confirm you can work remotely from Portugal (local entity, EOR or contractor)");
+  assert.equal(localizeFlag("Something custom", "en"), "Something custom");
+});
+
+test("company domains come from the company's own URLs, not job boards", () => {
+  assert.equal(companyDomain("https://careers.example-co.com/jobs/1", "Example Co"), "example-co.com");
+  assert.equal(companyDomain("https://apply.acme.co.uk/x", "Acme"), "acme.co.uk");
+  assert.equal(companyDomain("https://jobs.ashbyhq.com/acme/123", "Acme"), "");
+  assert.equal(companyDomain("https://unrelated.io/jobs", "Acme"), "");
+  assert.equal(domainMap([{ company: "Acme", posting: "https://boards.greenhouse.io/acme/1" }, { company: "acme", posting: "https://acme.io/careers" }]).get("acme"), "acme.io");
 });
 
 test("wrangler.local.jsonc merges over wrangler.jsonc", () => {

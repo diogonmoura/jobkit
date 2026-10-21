@@ -9,6 +9,7 @@
     "SUPABASE_ANON_KEY": "sb_publishable_…",
     "SITE_ORIGIN": "https://jobs.example.com",
     "JOBKIT_LANG": "en", // or "pt-PT"
+    "LOGO_DEV_TOKEN": "", // optional logo.dev publishable token (pk_...) for company logos
     "ADZUNA_COUNTRY": "gb"
     // External sign-in (another app on the same Supabase project signs users in):
     // "AUTH_MODE": "external", "LOGIN_URL": "https://app.example.com/login", "COOKIE_DOMAIN": ".example.com",

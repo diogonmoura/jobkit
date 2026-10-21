@@ -211,8 +211,36 @@ export function createJobkitDb(supabase, userId) {
     },
   };
 
+  // Job ids that already have a 👍/👎 (the thumbs are hidden once used).
+  const feedback = {
+    async voted() {
+      const { data, error } = await supabase
+        .from("jobkit_job_feedback")
+        .select("job_id, signal")
+        .eq("user_id", userId)
+        .in("signal", ["up", "down"]);
+      if (error) throw error;
+      return new Map((data ?? []).map((r) => [r.job_id, r.signal]));
+    },
+  };
+
+  // Companies the daily scan watches (read-only here; edited in Setup).
+  const scanTargets = {
+    async list() {
+      const { data, error } = await supabase
+        .from("jobkit_scan_targets")
+        .select("id, company, vendor, slug, enabled, last_scanned_at")
+        .eq("user_id", userId)
+        .order("company");
+      if (error) throw error;
+      return data ?? [];
+    },
+  };
+
   return {
     experience,
+    feedback,
+    scanTargets,
     collection(name) {
       if (name === "apps") {
         return {

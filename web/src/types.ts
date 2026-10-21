@@ -21,6 +21,8 @@ export interface Env {
   SCAN_CRON_SECRET?: string;
   /** UI language: "en" (default) or "pt-PT". Also the language of AI-written scan reasons and flags. */
   JOBKIT_LANG?: string;
+  /** Optional logo.dev publishable token (pk_…) for company logos; without it an initial is shown. */
+  LOGO_DEV_TOKEN?: string;
   /** "builtin" (default): the /login page. "external": another app signs users in to the same Supabase project. */
   AUTH_MODE?: string;
   /** External mode: sign-in page; jobkit appends ?next=<url>. Needs COOKIE_DOMAIN shared with that app. */
