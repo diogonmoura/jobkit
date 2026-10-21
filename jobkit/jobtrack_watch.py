@@ -916,7 +916,7 @@ def _fetch_taleo_postings(source: Source, timeout: int) -> List[Posting]:
 
 # --- Teamtailor -------------------------------------------------------------------
 #
-# Slug: the career site's host, e.g. "careers.coverflex.com" or "acme.teamtailor.com".
+# Slug: the career site's host, e.g. "careers.acme.com" or "acme.teamtailor.com".
 # Every Teamtailor career site serves /jobs.rss with all open roles and their
 # locations in a tt: namespace.
 
@@ -1043,7 +1043,7 @@ UNSUPPORTED_HINTS: Dict[str, str] = {
 
 CONTENT_VENDORS: Dict[str, str] = {
     "successfactors": "successfactors",
-    # A Teamtailor career site on the company's own domain (careers.coverflex.com)
+    # A Teamtailor career site on the company's own domain (careers.acme.com)
     # loads its images and scripts from this CDN.
     "teamtailor-cdn.com": "teamtailor",
 }

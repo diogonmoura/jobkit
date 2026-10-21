@@ -2164,18 +2164,18 @@ class TestTaleoAdapter(unittest.TestCase):
 class TestTeamtailorAdapter(unittest.TestCase):
     def test_parses_roles_with_locations_and_remote_status(self):
         postings = jobtrack_watch.parse_teamtailor(
-            _fixture_text("teamtailor.rss"), "careers.coverflex.com"
+            _fixture_text("teamtailor.rss"), "careers.northwind.example"
         )
         self.assertEqual([p.title for p in postings], ["Head of AI Ops", "Cybersecurity Lead"])
         self.assertEqual(postings[0].location, "Porto, Portugal; Hybrid")
         self.assertEqual(postings[0].posted, "2026-10-05")
         self.assertEqual(postings[1].location, "Remote")
-        self.assertEqual(postings[1].url, "https://careers.coverflex.com/jobs/8436969-cybersecurity-lead")
+        self.assertEqual(postings[1].url, "https://careers.northwind.example/jobs/1002-cybersecurity-lead")
 
     def test_a_custom_domain_is_recognised_by_its_cdn(self):
         html = '<img src="https://images.teamtailor-cdn.com/images/s3/abc.jpg">'
-        source = jobtrack_watch._resolve_from_html(html, "https://careers.coverflex.com/jobs/1-x")
-        self.assertEqual(str(source), "teamtailor:careers.coverflex.com")
+        source = jobtrack_watch._resolve_from_html(html, "https://careers.northwind.example/jobs/1-x")
+        self.assertEqual(str(source), "teamtailor:careers.northwind.example")
 
     def test_a_teamtailor_subdomain_resolves_without_fetching(self):
         source = jobtrack_watch.resolve_url("https://acme.teamtailor.com/jobs/1-pm", fetch=False)
@@ -2185,8 +2185,8 @@ class TestTeamtailorAdapter(unittest.TestCase):
         with mock.patch.object(
             jobtrack_watch, "_get_html", return_value=_fixture_text("teamtailor.rss")
         ) as get:
-            jobtrack_watch.fetch_postings(jobtrack_watch.Source("teamtailor", "careers.coverflex.com"))
-        self.assertEqual(get.call_args[0][0], "https://careers.coverflex.com/jobs.rss")
+            jobtrack_watch.fetch_postings(jobtrack_watch.Source("teamtailor", "careers.northwind.example"))
+        self.assertEqual(get.call_args[0][0], "https://careers.northwind.example/jobs.rss")
 
 
 class TestNotifyChannel(unittest.TestCase):
