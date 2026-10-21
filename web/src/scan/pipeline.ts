@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Env, PreferenceProfile, RawOpening, ScoreBreakdown } from "../types";
 import { createServiceSupabase } from "../auth";
+import { loadScoringCandidate } from "../experience";
 import { completeChat, type ChatMessage } from "../llm";
 import { langName, tr } from "../i18n";
 import { refreshProfileFromFeedback, loadProfile, loadCandidateProfile, seedScanTargets, normalizeRubric } from "../preferences";
@@ -141,7 +142,7 @@ export async function scoreOpenings(
     {
       role: "user",
       content: JSON.stringify({
-        candidate_profile: candidateProfile.slice(0, 6000),
+        candidate: candidateProfile.slice(0, 12000),
         preferences: {
           title_tiers: profile.title_tiers,
           seniority: profile.seniority,
@@ -256,7 +257,7 @@ export async function runJobScan(
       .eq("user_id", userId)
       .in("id", targetsRaw.map((t) => String(t.id)));
   }
-  const candidateProfile = await loadCandidateProfile(supabase, userId);
+  const candidateProfile = await loadScoringCandidate(supabase, userId, await loadCandidateProfile(supabase, userId));
   const excludedCompanies = fetchedAll.filter((o) => companyExcluded(o.company, profile)).length;
   const prefFiltered = prefilterOpenings(
     fetchedAll.filter((o) => !companyExcluded(o.company, profile)),
@@ -440,7 +441,7 @@ export async function importJobs(
   }
   if (!openings.length) return { results, costUsd };
   const profile = await loadProfile(supabase, userId);
-  const candidateProfile = await loadCandidateProfile(supabase, userId);
+  const candidateProfile = await loadScoringCandidate(supabase, userId, await loadCandidateProfile(supabase, userId));
   const { scores, costUsd: c } = await scoreOpenings(env, userId, request, profile, candidateProfile, openings);
   costUsd += c;
   const seniority = profile.seniority[0] ?? "Senior";

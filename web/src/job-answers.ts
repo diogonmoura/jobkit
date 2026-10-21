@@ -143,7 +143,7 @@ export async function generateJobAnswers(
       role: "system",
       content: [
         "You draft answers to job application form questions for the candidate, in the first person.",
-        "Be strictly truthful: use only facts from the detailed experience notes (richest source), candidate profile, master CV and tailored CV. Never invent experience, numbers, tools or employers. If the facts needed are missing, give the closest honest answer and set needs_input true with a short note.",
+        "Be strictly truthful: use only facts from the detailed experience notes (richest source; newer files win), master CV, tailored CV and the candidate's extra notes. Never invent experience, numbers, tools or employers. If the facts needed are missing, give the closest honest answer and set needs_input true with a short note.",
         "Every claim must be traceable to a specific line in the sources. Do NOT describe processes, frameworks, metrics, before/after numbers, team sizes, revenue figures or durations that are not written in the sources — not even plausible generic ones.",
         "If a question asks for specifics the sources lack (e.g. a number, experiment count, P&L size), answer only with what is true, write the gap as a bracketed placeholder like [number of users] for the candidate to fill, and set needs_input true.",
         "Never leave an answer empty: use a short draft or a placeholder such as [to confirm].",
@@ -164,9 +164,9 @@ export async function generateJobAnswers(
       content: [
         `Job: ${job.role} at ${job.company} (${job.location ?? ""})`,
         `<posting>\n${String(job.posting_text ?? "").slice(0, 12000)}\n</posting>`,
-        `<candidate_profile>\n${candidate.slice(0, 12000)}\n</candidate_profile>`,
-        `<master_cv>\n${String(prof?.master_cv ?? "").slice(0, 12000)}\n</master_cv>`,
         exp.text ? `${EXPERIENCE_HEADING}\n<experience_notes>\n${exp.text}\n</experience_notes>` : "",
+        `<master_cv>\n${String(prof?.master_cv ?? "").slice(0, 12000)}\n</master_cv>`,
+        candidate.trim() ? `Extra notes from the candidate (optional; the experience notes and master CV win on facts):\n<candidate_notes>\n${candidate.slice(0, 6000)}\n</candidate_notes>` : "",
         job.cv_md ? `<tailored_cv>\n${String(job.cv_md).slice(0, 8000)}\n</tailored_cv>` : "",
         opts.instructions?.trim() ? `Extra instructions from the candidate: ${opts.instructions.trim()}` : "",
         `<questions>\n${JSON.stringify(real.map((x) => ({ id: x.id, question: x.label, type: x.type, required: x.required, options: x.options })), null, 1)}\n</questions>`,

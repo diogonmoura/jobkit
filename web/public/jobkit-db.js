@@ -211,8 +211,22 @@ export function createJobkitDb(supabase, userId) {
     },
   };
 
+  // Job ids that already have a 👍/👎 (the thumbs are hidden once used).
+  const feedback = {
+    async voted() {
+      const { data, error } = await supabase
+        .from("jobkit_job_feedback")
+        .select("job_id, signal")
+        .eq("user_id", userId)
+        .in("signal", ["up", "down"]);
+      if (error) throw error;
+      return new Map((data ?? []).map((r) => [r.job_id, r.signal]));
+    },
+  };
+
   return {
     experience,
+    feedback,
     collection(name) {
       if (name === "apps") {
         return {

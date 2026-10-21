@@ -70,6 +70,7 @@ Open the Worker URL and complete `/setup`. The cron in `wrangler.jsonc` (`0 7 * 
 | `SITE_ORIGIN` | var, optional | Public URL, sent as `HTTP-Referer` to OpenRouter |
 | `COOKIE_DOMAIN` | var, optional | Share the auth cookie across subdomains (e.g. `.example.com`) |
 | `JOBKIT_LANG` | var, optional | UI language and language of AI-written reasons/flags/analysis: `en` (default) or `pt-PT` (European Portuguese). Locales live in `public/locales/` |
+| `LOGO_DEV_TOKEN` | var, optional | [logo.dev](https://www.logo.dev) publishable token (`pk_…`) for company logos on jobs, applications and following. Without it each company shows its initial |
 | `AUTH_MODE`, `LOGIN_URL` | var, optional | `AUTH_MODE=external` sends signed-out visitors to `LOGIN_URL?next=<url>` instead of `/login`, for when another app on the same Supabase project signs users in (set `COOKIE_DOMAIN` so the session cookie is shared) |
 | `LOGOUT_URL`, `SETTINGS_URL`, `HOME_URL`, `HOME_LABEL` | var, optional | Where Sign out and Settings go, and an extra nav link (external mode hides Sign out without `LOGOUT_URL`) |
 | `LLM_KEY_SOURCE` | var, optional | `table.column` holding a per-user OpenRouter key another app already stores (plain or `enc:v1:` with the same `SETTINGS_ENC_KEY`); used when no key is saved in `/setup` |

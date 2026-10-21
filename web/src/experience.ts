@@ -12,3 +12,20 @@ export async function loadExperience(supabase: SupabaseClient, userId: string) {
   if (error) throw new Error(`experience files: ${error.message}`);
   return buildExperienceBlock(data ?? []);
 }
+
+/**
+ * What scoring knows about the candidate. The uploaded experience files (newest first) are the basis, with the
+ * master CV as a fallback when there are none; the free-text profile from Preferences is only an optional extra note.
+ */
+export async function loadScoringCandidate(supabase: SupabaseClient, userId: string, notes: string): Promise<string> {
+  const exp = await loadExperience(supabase, userId);
+  let basis = exp.text;
+  if (!basis) {
+    const { data } = await supabase.from("jobkit_profile").select("master_cv").eq("user_id", userId).maybeSingle();
+    basis = String(data?.master_cv ?? "");
+  }
+  return [
+    basis.trim() ? `## Experience (uploaded files, newest first; newer facts win)\n${basis.trim().slice(0, 9000)}` : "",
+    notes.trim() ? `## Extra notes from the candidate\n${notes.trim().slice(0, 3000)}` : "",
+  ].filter(Boolean).join("\n\n");
+}

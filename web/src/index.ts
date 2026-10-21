@@ -49,7 +49,8 @@ function configScript(env: Env): string {
   };
   return (
     `window.__JOBKIT_SUPABASE=${JSON.stringify({ url: env.SUPABASE_URL ?? "", anonKey: env.SUPABASE_ANON_KEY ?? "", auth })};` +
-    `window.__JOBKIT_LANG=${JSON.stringify(env.JOBKIT_LANG || "en")};`
+    `window.__JOBKIT_LANG=${JSON.stringify(env.JOBKIT_LANG || "en")};` +
+    `window.__JOBKIT_LOGO_TOKEN=${JSON.stringify(env.LOGO_DEV_TOKEN || "")};`
   );
 }
 

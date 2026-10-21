@@ -3,6 +3,22 @@
 export default {
  "lang": "pt-PT",
  "strings": {
+  "Roles": "Funções",
+  "Good fit": "Boa correspondência",
+  "Feedback": "Feedback",
+  "CV analysis": "Análise do CV",
+  "CV markdown (edit)": "Markdown do CV (editar)",
+  "empty": "vazio",
+  "Undo applied (back to Jobs)": "Anular candidatura (voltar a Vagas)",
+  "Moved to Applications": "Movida para Candidaturas",
+  "Thanks: more like this": "Obrigado: mais vagas assim",
+  "Thanks: fewer like this": "Obrigado: menos vagas assim",
+  "Add…": "Adicionar…",
+  "Remove": "Remover",
+  "Extra notes for scoring and answers (optional)": "Notas extra para pontuação e respostas (opcional)",
+  "Extra notes for scoring and answers": "Notas extra para pontuação e respostas",
+  "Scoring, CVs and answers are based on your detailed experience files below (newest first) and your Master CV. Use this only for things those files don't say, such as positioning or hard rules. Anything here that repeats the files can be deleted.": "A pontuação, os CVs e as respostas baseiam-se nos ficheiros de experiência detalhada abaixo (do mais recente para o mais antigo) e no Master CV. Usa este campo só para o que esses ficheiros não dizem, como posicionamento ou regras obrigatórias. O que aqui repetir os ficheiros pode ser apagado.",
+  "Your CVs and detailed notes about your experience. Text is extracted in the browser (the original file is not stored). Active files, newest first, are the basis for scoring, CVs and answers: when files disagree the newer one wins, and nothing is invented beyond these, your Master CV and your extra notes. Uploading makes no AI calls.": "Os teus CVs e notas detalhadas sobre a tua experiência. O texto é extraído no browser (o ficheiro original não é guardado). Os ficheiros ativos, do mais recente para o mais antigo, são a base da pontuação, dos CVs e das respostas: quando os ficheiros divergem, prevalece o mais recente, e nada é inventado para além destes, do Master CV e das tuas notas extra. Carregar não faz chamadas à IA.",
   "⚑ Check the non-compete / outside-activities clause": "⚑ Verificar cláusula de não concorrência / atividades externas",
   "Check the non-compete / outside-activities clause": "Verificar cláusula de não concorrência / atividades externas",
   "Company type you asked to flag": "Tipo de empresa a sinalizar",
@@ -209,6 +225,9 @@ export default {
   "ghosted": "sem resposta"
  },
  "patterns": [
+  ["^Remove (.+)$", "Remover $1"],
+  ["^Add to (.+)$", "Adicionar a $1"],
+  ["^([\\d.,]+k?) characters$", "$1 caracteres"],
   ["^(⚑ )?Confirm you can work remotely from (.+) \\(local entity, EOR or contractor\\)$", "$1Confirmar elegibilidade remota a partir de $2 (entidade local/EOR/contractor)"],
   [
    "^Options: (.*)$",
