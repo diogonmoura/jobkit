@@ -2,8 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Env, SalaryPayload } from "./types";
 import { completeChat, type ChatMessage } from "./llm";
 
+// Number runs are capped at 24 characters: unbounded runs made matching quadratic
+// on long stretches of digits and spaces in posting text.
 const SALARY_RE =
-  /(?:€|EUR|\$|USD|£|GBP)\s*[\d][\d.,\s]*(?:k|K)?|\d[\d.,\s]*\s*(?:€|EUR|\$|USD|£|GBP)(?:\s*\/\s*(?:year|ano|month|mês))?|[\d][\d.,\s]*\s*(?:-|–|to|a)\s*[\d][\d.,\s]*\s*(?:€|EUR)/gi;
+  /(?:€|EUR|\$|USD|£|GBP)\s*[\d][\d.,\s]{0,24}(?:k|K)?|\d[\d.,\s]{0,24}(?:€|EUR|\$|USD|£|GBP)(?:\s*\/\s*(?:year|ano|month|mês))?|[\d][\d.,\s]{0,24}(?:-|–|to|a)\s*[\d][\d.,\s]{0,24}(?:€|EUR)/gi;
 
 const PAY_CONTEXT = /salary|compensation|pay range|base pay|\bote\b|annual|per year|salário|remuneração|vencimento|gehalt/i;
 

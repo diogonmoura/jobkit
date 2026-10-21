@@ -27,7 +27,12 @@
     const { createBrowserClient } = await import("https://esm.sh/@supabase/ssr@0.6.1");
     const sb = createBrowserClient(cfg.url, cfg.anonKey, { cookieOptions: { path: "/", sameSite: "lax", secure: location.protocol === "https:" } });
     const next = new URLSearchParams(location.search).get("next");
-    const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+    // Resolve against this origin so "//host" and "/\host" (read as "//host") can't leave the site.
+    let safeNext = "/";
+    try {
+      const target = new URL(next || "/", location.origin);
+      if (target.origin === location.origin) safeNext = target.pathname + target.search + target.hash;
+    } catch {}
     document.getElementById("login").addEventListener("submit", async (e) => {
       e.preventDefault();
       const err = document.getElementById("err"); err.hidden = true;

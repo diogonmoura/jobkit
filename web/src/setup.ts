@@ -28,7 +28,10 @@ const TABLES = [
 type Check = { ok: boolean; detail: string };
 
 function cleanUrl(u: string): string {
-  return String(u || "").trim().replace(/\/+$/, "");
+  // A loop rather than /\/+$/, which is quadratic on long runs of slashes.
+  let url = String(u || "").trim();
+  while (url.endsWith("/")) url = url.slice(0, -1);
+  return url;
 }
 
 /** Test a Supabase URL + publishable (anon) key + service role key without storing anything. */
