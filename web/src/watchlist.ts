@@ -80,7 +80,8 @@ export async function resolveBoardUrl(env: Env, userId: string, request: Request
       ],
     });
     costUsd = r.costUsd;
-    const j = JSON.parse(r.content) as { name?: string; hq?: string; industry?: string };
+    const m = r.content.match(/\{[\s\S]*\}/);
+    const j = JSON.parse(m ? m[0] : r.content) as { name?: string; hq?: string; industry?: string };
     company = String(j.name ?? "").trim().slice(0, 80) || company;
     hq = String(j.hq ?? "").trim().slice(0, 60);
     industry = String(j.industry ?? "").trim().slice(0, 40);
