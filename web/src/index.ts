@@ -23,8 +23,34 @@ function redirect(to: string, request: Request): Response {
   return Response.redirect(new URL(to, request.url).toString(), 302);
 }
 
+export function externalAuth(env: Env): boolean {
+  return env.AUTH_MODE === "external" && Boolean(env.LOGIN_URL);
+}
+
+function loginRedirect(request: Request, env: Env): string {
+  const url = new URL(request.url);
+  if (externalAuth(env)) {
+    const login = new URL(env.LOGIN_URL as string);
+    login.searchParams.set("next", url.toString());
+    return login.toString();
+  }
+  return `/login?next=${encodeURIComponent(url.pathname + url.search)}`;
+}
+
 function configScript(env: Env): string {
-  return `window.__JOBKIT_SUPABASE=${JSON.stringify({ url: env.SUPABASE_URL ?? "", anonKey: env.SUPABASE_ANON_KEY ?? "" })};`;
+  const auth = {
+    external: externalAuth(env),
+    loginUrl: externalAuth(env) ? env.LOGIN_URL : "/login",
+    logoutUrl: env.LOGOUT_URL || "",
+    settingsUrl: env.SETTINGS_URL || "",
+    homeUrl: env.HOME_URL || "",
+    homeLabel: env.HOME_LABEL || "",
+    cookieDomain: env.COOKIE_DOMAIN || "",
+  };
+  return (
+    `window.__JOBKIT_SUPABASE=${JSON.stringify({ url: env.SUPABASE_URL ?? "", anonKey: env.SUPABASE_ANON_KEY ?? "", auth })};` +
+    `window.__JOBKIT_LANG=${JSON.stringify(env.JOBKIT_LANG || "en")};`
+  );
 }
 
 function injectConfig(html: string, env: Env): string {
@@ -70,6 +96,8 @@ export default {
     if (url.pathname === "/setup" || url.pathname === "/setup.html") return servePage(request, env, "/setup");
     if (url.pathname === "/login" || url.pathname === "/login.html") {
       if (!supabaseConfigured(env)) return redirect("/setup", request);
+      // Sign-in happens in the other app; "/" sends signed-out visitors there.
+      if (externalAuth(env)) return redirect("/", request);
       return servePage(request, env, "/login");
     }
     if (PUBLIC_PATHS.has(url.pathname) || url.pathname.startsWith("/vendor/")) return env.ASSETS.fetch(request);
@@ -84,12 +112,13 @@ export default {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user || user.id !== owner) {
-      return applyCookies(redirect(`/login?next=${encodeURIComponent(url.pathname + url.search)}`, request), pending);
+      return applyCookies(redirect(loginRedirect(request, env), request), pending);
     }
 
     if (url.pathname === "/" || url.pathname === "/index.html") {
       const profile = await loadProfile(createServiceSupabase(env), user.id).catch(() => null);
-      if (profile && !profile.onboarded_at) return applyCookies(redirect("/setup", request), pending);
+      // Only a fresh profile goes to the wizard; an instance set up before the wizard existed keeps working.
+      if (profile && !profile.onboarded_at && !profile.roles.length) return applyCookies(redirect("/setup", request), pending);
       return applyCookies(await servePage(request, env, "/"), pending);
     }
 

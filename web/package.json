@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "node scripts/wrangler-local.mjs dev",
+    "deploy": "node scripts/wrangler-local.mjs deploy",
     "types": "wrangler types",
     "screenshots": "node scripts/capture-screenshots.mjs",
     "build:docx": "node scripts/build-docx-bundle.mjs",
@@ -27,5 +27,8 @@
     "tsx": "^4.19.4",
     "typescript": "^5.9.3",
     "wrangler": "^4.151.3"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

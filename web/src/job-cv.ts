@@ -1,3 +1,4 @@
+import { langName } from "./i18n";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Env } from "./types";
 import { completeChat, type ChatMessage } from "./llm";
@@ -37,10 +38,13 @@ export async function generateJobCv(
   const postingText = (opts.postingText ?? "").trim() || String(job.posting_text ?? "");
 
   const experience = (await loadExperience(supabase, userId)).text;
+  const { data: pp } = await supabase.from("jobkit_preference_profile").select("profile").eq("user_id", userId).maybeSingle();
+  const writingRules = String((pp?.profile as { writing_rules?: string } | null)?.writing_rules ?? "").trim();
   const messages = buildTailorCvMessages({ masterCv, postingText, company: job.company, role: job.role, experience }) as ChatMessage[];
   const extra = [
     opts.instructions?.trim() ? `Additional instructions from the candidate for this version: ${opts.instructions.trim()}` : "",
-    `After the CV Markdown, output a line containing only ${SPLIT} and then 3 to 5 short bullets in English on fit, gaps and what to emphasise in the interview. Nothing after the bullets.`,
+    writingRules ? `Writing rules from the candidate (follow them):\n${writingRules}` : "",
+    `After the CV Markdown, output a line containing only ${SPLIT} and then 3 to 5 short bullets in ${langName(env)} on fit, gaps and what to emphasise in the interview. Nothing after the bullets.`,
   ].filter(Boolean).join("\n\n");
   messages.push({ role: "user", content: extra });
 

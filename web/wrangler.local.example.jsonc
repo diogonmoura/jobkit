@@ -1,0 +1,19 @@
+// Copy to wrangler.local.jsonc (gitignored) for your own deploy; `npm run dev` / `npm run deploy` merge it over
+// wrangler.jsonc. Secrets still go in with `npx wrangler secret put NAME` (add --name <your worker name>).
+{
+  "name": "my-jobkit",
+  "routes": [{ "pattern": "jobs.example.com", "custom_domain": true }],
+  "triggers": { "crons": ["0 7 * * *"] },
+  "vars": {
+    "SUPABASE_URL": "https://<project-ref>.supabase.co",
+    "SUPABASE_ANON_KEY": "sb_publishable_…",
+    "SITE_ORIGIN": "https://jobs.example.com",
+    "JOBKIT_LANG": "en", // or "pt-PT"
+    "ADZUNA_COUNTRY": "gb"
+    // External sign-in (another app on the same Supabase project signs users in):
+    // "AUTH_MODE": "external", "LOGIN_URL": "https://app.example.com/login", "COOKIE_DOMAIN": ".example.com",
+    // "LOGOUT_URL": "https://app.example.com/logout", "SETTINGS_URL": "https://app.example.com/settings",
+    // "HOME_URL": "https://app.example.com", "HOME_LABEL": "Dashboard",
+    // "LLM_KEY_SOURCE": "user_secrets.openrouter_key", "JOBKIT_OWNER_USER_ID": "<uuid>"
+  }
+}
