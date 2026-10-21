@@ -66,9 +66,13 @@ export async function classifySuitability(
     const messages: ChatMessage[] = [
       {
         role: "system",
-        content:
-          "You check job postings against a candidate's hard constraints. A posting is unsuitable only if it clearly breaks a constraint as a CORE requirement of the role (not a nice-to-have, and not just the company's industry). " +
-          'Reply with JSON only: {"items":[{"i":number,"suitable":boolean,"reason":string}]}. reason: one short English sentence (max 15 words), empty when suitable.',
+        content: [
+          "You check job postings against a candidate's hard constraints, using the candidate summary for context.",
+          "Default to suitable. Mark a posting unsuitable ONLY when the posting text itself clearly states a requirement that breaks a constraint as a core, must-have part of the job (for example: a required number of years of professional software engineering, writing production code daily, or an engineering job title).",
+          "Being technical, hands-on, building with AI tools, designing architecture, working with engineers, or a nice-to-have skill do NOT break a coding constraint. Topics unrelated to the constraints never make a role unsuitable.",
+          "For each unsuitable job, quote the exact phrase from the posting that proves it in evidence. If you cannot quote one, mark it suitable.",
+          'Reply with JSON only: {"items":[{"i":number,"suitable":boolean,"evidence":string,"reason":string}]}. reason: one short English sentence (max 15 words), empty when suitable.',
+        ].join("\n"),
       },
       {
         role: "user",
@@ -82,10 +86,13 @@ export async function classifySuitability(
     try {
       const r = await completeChat(env, { request, userId, messages, model, json: true });
       costUsd += r.costUsd;
-      const parsed = JSON.parse(r.content) as { items?: { i: number; suitable: boolean; reason?: string }[] };
+      const parsed = JSON.parse(r.content) as { items?: { i: number; suitable: boolean; reason?: string; evidence?: string }[] };
       for (const it of parsed.items ?? []) {
         const n = start + Number(it.i);
-        if (n >= start && n < start + chunk.length && it.suitable === false) out[n] = { ok: false, reason: String(it.reason ?? "").trim().slice(0, 200) || "Breaks one of your role constraints.", model, key, checked_at: now };
+        const evidence = String((it as { evidence?: string }).evidence ?? "").trim();
+        // Only trust a "no" that quotes the posting.
+        const quoted = evidence.length > 8 && norm(chunk[Number(it.i)]?.text ?? "").includes(norm(evidence).slice(0, 40));
+        if (n >= start && n < start + chunk.length && it.suitable === false && quoted) out[n] = { ok: false, reason: String(it.reason ?? "").trim().slice(0, 200) || "Breaks one of your role constraints.", model, key, checked_at: now };
       }
     } catch {
       /* fail open: the job stays visible */
