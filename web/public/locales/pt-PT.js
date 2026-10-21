@@ -3,6 +3,11 @@
 export default {
  "lang": "pt-PT",
  "strings": {
+  "Daily scan watchlist": "Lista de vigilância da pesquisa diária",
+  "Company job boards the daily scan reads. Change them in": "Páginas de emprego das empresas que a pesquisa diária lê. Altera-as no",
+  "scanning": "em pesquisa",
+  "paused": "em pausa",
+  "not scanned yet": "ainda não pesquisada",
   "Roles": "Funções",
   "Good fit": "Boa correspondência",
   "Feedback": "Feedback",
@@ -225,6 +230,10 @@ export default {
   "ghosted": "sem resposta"
  },
  "patterns": [
+  ["^scanned (.+)$", "pesquisada a $1"],
+  ["^Remote: fully remote$", "Remoto: totalmente remoto"],
+  ["^Remote: hybrid$", "Remoto: híbrido"],
+  ["^Remote: other$", "Remoto: outro"],
   ["^Remove (.+)$", "Remover $1"],
   ["^Add to (.+)$", "Adicionar a $1"],
   ["^([\\d.,]+k?) characters$", "$1 caracteres"],

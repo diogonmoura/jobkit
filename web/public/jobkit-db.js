@@ -224,9 +224,23 @@ export function createJobkitDb(supabase, userId) {
     },
   };
 
+  // Companies the daily scan watches (read-only here; edited in Setup).
+  const scanTargets = {
+    async list() {
+      const { data, error } = await supabase
+        .from("jobkit_scan_targets")
+        .select("id, company, vendor, slug, enabled, last_scanned_at")
+        .eq("user_id", userId)
+        .order("company");
+      if (error) throw error;
+      return data ?? [];
+    },
+  };
+
   return {
     experience,
     feedback,
+    scanTargets,
     collection(name) {
       if (name === "apps") {
         return {
