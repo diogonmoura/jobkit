@@ -3,6 +3,8 @@
 export default {
  "lang": "pt-PT",
  "strings": {
+  "Headquarters": "Sede",
+  "0 open jobs": "0 vagas abertas",
   "Daily scan watchlist": "Lista de vigilância da pesquisa diária",
   "Company job boards the daily scan reads. Change them in": "Páginas de emprego das empresas que a pesquisa diária lê. Altera-as no",
   "scanning": "em pesquisa",
@@ -230,6 +232,8 @@ export default {
   "ghosted": "sem resposta"
  },
  "patterns": [
+  ["^1 open job$", "1 vaga aberta"],
+  ["^(\\d+) open jobs$", "$1 vagas abertas"],
   ["^(\\d+) answers$", "$1 respostas"],
   ["^scanned (.+)$", "pesquisada a $1"],
   ["^Remote: fully remote$", "Remoto: totalmente remoto"],

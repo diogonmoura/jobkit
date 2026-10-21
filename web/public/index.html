@@ -193,10 +193,30 @@ const section=(key,title,body,extra="")=>`<details class="jk-section" data-sec="
 document.addEventListener("toggle",e=>{const d=e.target;if(!d.dataset||!d.dataset.sec)return;if(d.open){openSections.add(d.dataset.sec);autogrowAll(d)}else openSections.delete(d.dataset.sec)},true);
 let voted=new Map(),scanTargets=[];
 const VENDOR={greenhouse:"Greenhouse",lever:"Lever","lever-eu":"Lever (EU)",ashby:"Ashby",workable:"Workable","remote-com":"Remote.com"};
+// Per-company chips on the Following tab: HQ (optional setting on the scan target) and matching open jobs.
+function openJobsFor(company){const k=normCo(company);return jobs.filter(j=>!j.dismissed&&!appForJob(j.id)&&normCo(j.company)===k).length}
+function hqFor(company){const k=normCo(company);const t=scanTargets.find(x=>normCo(x.company)===k&&x.hq);return t?t.hq:""}
+function coChips(company,hq){
+  const n=openJobsFor(company);
+  const loc=hq?`<span class="co-chip co-chip--hq" title="Headquarters">📍 ${esc(hq)}</span>`:"";
+  const jobsChip=n?`<a class="co-chip co-chip--jobs" href="#jobs?company=${encodeURIComponent(company)}" data-company-jobs="${esc(company)}">${n} open ${n===1?"job":"jobs"}</a>`
+    :`<span class="co-chip co-chip--zero" aria-disabled="true">0 open jobs</span>`;
+  return `<span class="co-chips">${loc}${jobsChip}</span>`;
+}
+// Deep link #jobs?company=X: open Jobs, scroll to and highlight that company's listings.
+function focusCompanyJobs(company){
+  setView("jobs");renderJobs();
+  const k=normCo(company);
+  const cards=[...document.querySelectorAll("#job-cards > li[data-company]")].filter(li=>li.dataset.company===k);
+  document.querySelectorAll(".job-card.is-highlight").forEach(c=>c.classList.remove("is-highlight"));
+  cards.forEach(c=>c.classList.add("is-highlight"));
+  if(cards[0])cards[0].scrollIntoView({block:"start",behavior:"smooth"});
+  clearTimeout(focusCompanyJobs.t);focusCompanyJobs.t=setTimeout(()=>cards.forEach(c=>c.classList.remove("is-highlight")),6000);
+}
 function renderWatchlist(){
   const sec=$("watchlist-section");if(!sec)return;
   sec.hidden=!scanTargets.length;if(!scanTargets.length)return;
-  $("watchlist").innerHTML=scanTargets.map(t=>`<li class="${t.enabled?"":"is-off"}"><span class="co co-line">${coLogo(t.company)}<span>${esc(t.company)}</span></span>
+  $("watchlist").innerHTML=scanTargets.map(t=>`<li class="${t.enabled?"":"is-off"}"><span class="co co-line">${coLogo(t.company)}<span>${esc(t.company)}</span></span>${coChips(t.company,t.hq)}
     <span class="pill ${t.enabled?"w-watching":"w-unsupported"}">${t.enabled?"scanning":"paused"}</span>
     <span class="board">${esc(VENDOR[t.vendor]||t.vendor)}</span><span class="num">${t.last_scanned_at?"scanned "+esc(fmtDate(t.last_scanned_at)):"not scanned yet"}</span></li>`).join("");
 }
@@ -293,7 +313,7 @@ function printCvFromMarkdown(md){
 }
 
 function initialView(){
-  const h=(location.hash||"").slice(1);
+  const h=(location.hash||"").slice(1).split("?")[0];
   if(VIEWS.includes(h))return h;
   try{const v=localStorage.getItem("tracker-view");if(VIEWS.includes(v))return v}catch(_){}
   return "applications";
@@ -311,7 +331,7 @@ function setView(v,focus){
   if(focus)$("tab-"+v).focus();
   if(v==="preferences")loadCandidateProfile();
   try{localStorage.setItem("tracker-view",v)}catch(_){}
-  try{history.replaceState(null,"","#"+v)}catch(_){}
+  try{if(location.hash.slice(1).split("?")[0]!==v||v!=="jobs")history.replaceState(null,"","#"+v)}catch(_){}
 }
 
 function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,3500)}
@@ -352,7 +372,7 @@ function renderFollowing(){
     const right=w.status==="unsupported"?"":(w.last_check?"checked "+esc(fmtDate(w.last_check)):"not checked yet");
     const count=w.status==="unsupported"?"":esc(w.tracked)+" roles seen";
     const note=(w.status==="unsupported"||w.status==="failing")&&w.note?`<span class="note">${esc(w.note)}</span>`:"";
-    return `<li><span class="co co-line">${coLogo(w.company)}<span>${esc(w.company)}</span></span><span class="pill w-${esc(w.status)}">${WLABEL[w.status]||esc(w.status)}</span>
+    return `<li><span class="co co-line">${coLogo(w.company)}<span>${esc(w.company)}</span></span>${coChips(w.company,w.hq||hqFor(w.company))}<span class="pill w-${esc(w.status)}">${WLABEL[w.status]||esc(w.status)}</span>
       <span class="board">${esc(w.board||"")}${count?" · "+count:""}</span><span class="num">${right}</span>${note}</li>`;
   }).join("");
 }
@@ -600,7 +620,7 @@ function renderJobs(){
     const open=openJobId===j.id;
     const app=appForJob(j.id);
     const sal=formatSalary(j.salary);
-    return `<li class="job-card mf-glass" data-job="${esc(j.id)}">
+    return `<li class="job-card mf-glass" data-job="${esc(j.id)}" data-company="${esc(normCo(j.company))}">
       <div class="job-card__head">
         <div class="job-card__title">${coLogo(j.company,"lg")}<div><b>${esc(j.company)}</b> · ${esc(j.role)} ${j.is_new?`<span class="job-badge-novo">New${j.source==="scan"?" · Daily scan":""}</span>`:""}
         <div class="mf-muted">${esc(j.location||"")} ${j.scan_score!=null?`<span class="job-card__score">${esc(j.scan_score)}/100</span>`:""}</div>
@@ -966,7 +986,10 @@ document.addEventListener("keydown",e=>{
     e.preventDefault();const i=VIEWS.indexOf(view);setView(VIEWS[(i+(e.key==="ArrowRight"?1:VIEWS.length-1))%VIEWS.length],true);return}
   if(e.key==="Enter"&&e.target.id&&e.target.id.startsWith("ev-")){e.preventDefault();logEvent(e.target.id.slice(3))}
 });
-window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(VIEWS.includes(h)&&h!==view)setView(h)});
+const hashCompany=()=>{const m=location.hash.match(/^#jobs\?company=([^&]*)/);return m?decodeURIComponent(m[1]):""};
+window.addEventListener("hashchange",()=>{const c=hashCompany();if(c){focusCompanyJobs(c);return}const h=location.hash.slice(1).split("?")[0];if(VIEWS.includes(h)&&h!==view)setView(h)});
+document.addEventListener("click",e=>{const a=e.target.closest("[data-company-jobs]");if(!a)return;e.preventDefault();e.stopPropagation();
+  try{history.replaceState(null,"","#jobs?company="+encodeURIComponent(a.dataset.companyJobs))}catch(_){}focusCompanyJobs(a.dataset.companyJobs)},true);
 
 $("addtoggle").addEventListener("click",()=>{const f=$("addform");f.hidden=!f.hidden;$("addtoggle").setAttribute("aria-expanded",String(!f.hidden))});
 function bindMasterCvEditor(){
@@ -1112,7 +1135,8 @@ render();
   },err=>{bindMasterCvEditor();toast("Profile load: "+(err&&err.code||err))});
   db.collection("jobs").onSnapshot(s=>{
     jobs=s.docs.map(d=>({id:d.id,...d.data()}));
-    renderJobs();
+    renderJobs();renderFollowing();
+    const c=hashCompany();if(c&&!focusCompanyJobs.done){focusCompanyJobs.done=true;setTimeout(()=>focusCompanyJobs(c),50)}
   },err=>toast("Jobs: "+(err&&err.code||err)));
   db.collection("preferences").onSnapshot(s=>{
     const doc=s.docs.find(d=>d.id==="preferences");

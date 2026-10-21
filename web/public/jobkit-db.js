@@ -229,7 +229,7 @@ export function createJobkitDb(supabase, userId) {
     async list() {
       const { data, error } = await supabase
         .from("jobkit_scan_targets")
-        .select("id, company, vendor, slug, enabled, last_scanned_at")
+        .select("*")
         .eq("user_id", userId)
         .order("company");
       if (error) throw error;
