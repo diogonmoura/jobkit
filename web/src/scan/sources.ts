@@ -21,6 +21,46 @@ function jobId(value: unknown): string {
   return "";
 }
 
+const xmlText = (s: string) =>
+  s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+const tag = (item: string, name: string) => {
+  const m = item.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
+  return m ? xmlText(m[1]).trim() : "";
+};
+
+/** Parse a Teamtailor career-site RSS feed (https://<host>/jobs.rss) into openings. */
+export function parseTeamtailorRss(xml: string, target: ScanTarget): RawOpening[] {
+  return (xml.match(/<item>[\s\S]*?<\/item>/g) ?? [])
+    .map((item) => {
+      const url = tag(item, "link");
+      const id = (url.match(/\/jobs\/(\d+)/) ?? [])[1] || tag(item, "guid");
+      if (!id) return null;
+      const locs = [...item.matchAll(/<tt:location>([\s\S]*?)<\/tt:location>/g)].map((m) =>
+        [tag(m[1], "tt:city"), tag(m[1], "tt:country")].filter(Boolean).join(", ") || tag(m[1], "tt:name"),
+      );
+      const remote = tag(item, "remoteStatus");
+      const location = [...new Set(locs.filter(Boolean))].join(" / ") + (remote && remote !== "none" ? ` (remote: ${remote})` : "");
+      return {
+        externalKey: `teamtailor:${target.slug}:${id}`,
+        company: target.company,
+        title: tag(item, "title"),
+        url,
+        location: location.trim(),
+        description: tag(item, "description").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+        source: "scan",
+        vendor: "teamtailor",
+      } satisfies RawOpening;
+    })
+    .filter(Boolean) as RawOpening[];
+}
+
+export async function fetchTeamtailor(target: ScanTarget): Promise<RawOpening[]> {
+  const url = `https://${target.slug.replace(/[^a-z0-9.-]/gi, "")}/jobs.rss`;
+  const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/rss+xml, application/xml" } });
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+  return parseTeamtailorRss(await res.text(), target);
+}
+
 export async function fetchGreenhouse(
   target: ScanTarget,
 ): Promise<RawOpening[]> {
@@ -309,6 +349,7 @@ export async function fetchAllSources(
     else if (t.vendor === "ashby") tasks.push(fetchAshby(t));
     else if (t.vendor === "workable") tasks.push(fetchWorkable(t));
     else if (t.vendor === "remote-com") tasks.push(fetchRemoteCom(t));
+    else if (t.vendor === "teamtailor") tasks.push(fetchTeamtailor(t));
   }
   tasks.push(fetchRemotive(), fetchArbeitnow(), fetchAdzuna(env));
 

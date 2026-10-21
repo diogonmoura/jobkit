@@ -2,11 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Env, PreferenceProfile, RawOpening, ScoreBreakdown } from "../types";
 import { createServiceSupabase } from "../auth";
 import { loadScoringCandidate } from "../experience";
+import { classifySuitability, candidateSummary, titleVerdict, isEngineeringTitle, type Suitability } from "./suitability";
 import { completeChat, type ChatMessage } from "../llm";
 import { langName, tr } from "../i18n";
 import { refreshProfileFromFeedback, loadProfile, loadCandidateProfile, seedScanTargets, normalizeRubric } from "../preferences";
 import { dedupeOpenings, prefilterOpenings, companyExcluded, companyFlagged } from "./prefilter";
-import { fetchAllSources, fetchAshby, remoteComOpening, remoteComJson, type ScanTarget } from "./sources";
+import { fetchAllSources, fetchAshby, fetchTeamtailor, remoteComOpening, remoteComJson, type ScanTarget } from "./sources";
 import {
   estimateSalariesBatch,
   extractBenefits,
@@ -17,6 +18,7 @@ import {
 /** Cloudflare free plan allows 50 subrequests per invocation; ~20 go to Supabase/LLM, the rest to job boards. Targets rotate. */
 const MAX_TARGETS_PER_RUN = 22;
 /** Default minimum score for the daily scan (profile.min_score overrides it). */
+const MAX_PER_COMPANY = 5;
 const MIN_SCORE = 50;
 
 function homeLabel(profile: PreferenceProfile): string {
@@ -284,7 +286,17 @@ export async function runJobScan(
     if (a.posting) urls.add(String(a.posting).split("?")[0].toLowerCase());
   }
 
-  const candidates = dedupeOpenings(prefFiltered, keys, urls).slice(0, 30);
+  const perCompany = new Map<string, number>();
+  const candidates = dedupeOpenings(prefFiltered, keys, urls)
+    .filter((o) => !(profile.exclude_engineering_titles && isEngineeringTitle(o.title)))
+    // Cap per company so one large board can't crowd out the others in the scoring batch.
+    .filter((o) => {
+      const k = o.company.toLowerCase();
+      const n = (perCompany.get(k) ?? 0) + 1;
+      perCompany.set(k, n);
+      return n <= MAX_PER_COMPANY;
+    })
+    .slice(0, 30);
   const scored: { opening: RawOpening; score: number; reason: string; breakdown: ScoreBreakdown | null; flags: string[] }[] = [];
   if (candidates.length) {
     const { scores, costUsd: c } = await scoreOpenings(env, userId, request, profile, candidateProfile, candidates);
@@ -295,14 +307,20 @@ export async function runJobScan(
   scored.sort((a, b) => b.score - a.score);
   const top = scored.filter((s) => s.score >= (profile.min_score ?? MIN_SCORE)).slice(0, 10);
   for (const t of top) t.flags = standardFlags(t.opening, t.flags, profile).map((f) => tr(env, f));
+  let suit: Suitability[] = [];
+  if (top.length && (profile.role_constraints ?? []).length) {
+    const r = await classifySuitability(env, userId, request, profile, await candidateSummary(supabase, userId), top.map((t) => ({ title: t.opening.title, company: t.opening.company, text: t.opening.description })));
+    suit = r.results;
+    costUsd += r.costUsd;
+  }
 
   const salaryDb = env.SUPABASE_SERVICE_ROLE_KEY ? createServiceSupabase(env) : supabase;
   const seniority = profile.seniority[0] ?? "Senior";
-  const prepared = top.map((item) => {
+  const prepared = top.map((item, n) => {
     const published = extractPublishedSalary(item.opening.description);
     const benefits = extractBenefits(item.opening.description);
     const loc = item.opening.location || homeLabel(profile) || "Remote";
-    return { ...item, published, benefits, loc };
+    return { ...item, published, benefits, loc, suitability: suit[n] ?? null };
   });
   let estimates = new Map<string, unknown>();
   try {
@@ -336,6 +354,7 @@ export async function runJobScan(
         ? { estimate: estimates.get(salaryCacheKey(p.opening.title, seniority, p.loc)), benefits: p.benefits }
         : { benefits: p.benefits },
     benefits: p.benefits,
+    suitability: p.suitability,
   }));
   let inserted = 0;
   const insertErrors: string[] = [];
@@ -378,7 +397,11 @@ export function decodeEntities(s: string): string {
 }
 
 /** Resolve a posting URL (ATS link or a company careers page backed by Ashby) to one opening with full text. */
-async function resolvePosting(url: string, companyFor: (vendor: string, slug: string) => string): Promise<RawOpening> {
+async function resolvePosting(
+  url: string,
+  companyFor: (vendor: string, slug: string) => string,
+  teamtailorHosts: Set<string> = new Set(),
+): Promise<RawOpening> {
   const u = new URL(url);
   const parts = u.pathname.split("/").filter(Boolean);
   const host = u.hostname.toLowerCase();
@@ -406,6 +429,14 @@ async function resolvePosting(url: string, companyFor: (vendor: string, slug: st
     const o = job && remoteComOpening(job, companyFor("remote-com", "remote"));
     if (!o) throw new Error("Remote.com posting not found");
     return { ...o, source: "import" };
+  }
+  // Teamtailor career sites (<x>.teamtailor.com or a custom domain): /jobs/<numeric id>-<title>, read from the public RSS feed.
+  const tt = parts[0] === "jobs" ? parts[1]?.match(/^(\d+)(-|$)/) : null;
+  if (tt && (/\.teamtailor\.com$/.test(host) || teamtailorHosts.has(host))) {
+    const all = await fetchTeamtailor({ company: companyFor("teamtailor", host), vendor: "teamtailor", slug: host });
+    const hit = all.find((o) => o.externalKey.endsWith(":" + tt[1]));
+    if (!hit) throw new Error(`Posting not found on the Teamtailor site "${host}"`);
+    return { ...hit, url, source: "import" };
   }
   let slug: string, match: (o: RawOpening) => boolean;
   const uuid = u.pathname.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0]?.toLowerCase();
@@ -437,11 +468,12 @@ export async function importJobs(
   const companyFor = (vendor: string, slug: string) =>
     String((targets ?? []).find((t) => t.slug === slug && (t.vendor === vendor || vendor === "ashby"))?.company ?? "") ||
     slug.charAt(0).toUpperCase() + slug.slice(1);
+  const ttHosts = new Set((targets ?? []).filter((t) => t.vendor === "teamtailor").map((t) => String(t.slug)));
   const results: ImportResult[] = [];
   const openings: RawOpening[] = [];
   for (const url of urls) {
     try {
-      openings.push(await resolvePosting(url, companyFor));
+      openings.push(await resolvePosting(url, companyFor, ttHosts));
       results.push({ url, ok: true });
     } catch (e) {
       results.push({ url, ok: false, error: e instanceof Error ? e.message : String(e) });
@@ -453,7 +485,15 @@ export async function importJobs(
   const { scores, costUsd: c } = await scoreOpenings(env, userId, request, profile, candidateProfile, openings);
   costUsd += c;
   const seniority = profile.seniority[0] ?? "Senior";
+  const verdicts: (Suitability | null)[] = openings.map((o) => titleVerdict(profile, o.title));
+  const needLlm = openings.map((o, i) => ({ o, i })).filter(({ i }) => !verdicts[i]);
+  if (needLlm.length && (profile.role_constraints ?? []).length) {
+    const r = await classifySuitability(env, userId, request, profile, await candidateSummary(supabase, userId), needLlm.map(({ o }) => ({ title: o.title, company: o.company, text: o.description })));
+    needLlm.forEach(({ i }, n) => (verdicts[i] = r.results[n]));
+    costUsd += r.costUsd;
+  }
   const prepared = openings.map((o, i) => ({
+    suitability: verdicts[i],
     o,
     ...scores[i],
     flags: standardFlags(o, scores[i].flags, profile).map((f) => tr(env, f)),
@@ -500,6 +540,7 @@ export async function importJobs(
       dismissed: false,
       salary: p.published ? { published: p.published, benefits: p.benefits } : est ? { estimate: est, benefits: p.benefits } : { benefits: p.benefits },
       benefits: p.benefits,
+      suitability: p.suitability,
       updated_at: new Date().toISOString(),
     };
     while (results[k] && !results[k].ok) k++;

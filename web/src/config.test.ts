@@ -52,3 +52,31 @@ test("wrangler.local.jsonc merges over wrangler.jsonc", () => {
   const out = merge(base, { name: "mine", vars: { B: "x" }, triggers: { crons: ["0 6 * * *"] } });
   assert.deepEqual(out, { name: "mine", vars: { A: "1", B: "x" }, triggers: { crons: ["0 6 * * *"] } });
 });
+
+test("engineering titles are pre-filtered unless clearly product or ops", async () => {
+  const { isEngineeringTitle } = await import("./scan/suitability");
+  for (const t of ["Product Engineer", "Senior AI Engineer", "Full-Stack Engineer", "Principal ML Platform Engineer", "Software Developer", "Staff Solutions Architect"].slice(0, 5)) assert.ok(isEngineeringTitle(t), t);
+  for (const t of ["Product Manager, Engineering", "Head of AI Native Operations", "Chief of Staff", "Senior Product Manager", "AI Ops Lead", "Product Lead, Infrastructure", "Engineering Manager"]) assert.ok(!isEngineeringTitle(t), t);
+});
+
+test("careers pages with an embedded job board are detected", async () => {
+  const { findEmbeddedBoard } = await import("./watchlist");
+  assert.deepEqual(findEmbeddedBoard('<script src="https://boards.greenhouse.io/embed/job_board/js?for=acme"></script>'), { vendor: "greenhouse", slug: "acme" });
+  assert.deepEqual(findEmbeddedBoard('<a href="https://jobs.ashbyhq.com/acme-co">All jobs</a>'), { vendor: "ashby", slug: "acme-co" });
+  assert.deepEqual(findEmbeddedBoard('<a href="https://jobs.eu.lever.co/acme/123">x</a>'), { vendor: "lever-eu", slug: "acme" });
+  assert.equal(findEmbeddedBoard("<p>no board here</p>"), null);
+});
+
+test("Teamtailor RSS feeds are parsed and custom-domain career sites detected", async () => {
+  const { parseTeamtailorRss } = await import("./scan/sources");
+  const { findEmbeddedBoard } = await import("./watchlist");
+  const xml = `<rss version="2.0"><channel><item><title>Head of Ops &amp; CX</title><description>&lt;p&gt;Lead the team.&lt;/p&gt;</description>
+<link>https://careers.example.com/jobs/123-head-of-ops</link><remoteStatus>hybrid</remoteStatus><guid>g1</guid>
+<tt:locations><tt:location><tt:name>HQ</tt:name><tt:city>Madrid</tt:city><tt:country>Spain</tt:country></tt:location></tt:locations></item></channel></rss>`;
+  const [o] = parseTeamtailorRss(xml, { company: "Example", vendor: "teamtailor", slug: "careers.example.com" });
+  assert.equal(o.title, "Head of Ops & CX");
+  assert.equal(o.externalKey, "teamtailor:careers.example.com:123");
+  assert.equal(o.location, "Madrid, Spain (remote: hybrid)");
+  assert.equal(o.description, "Lead the team.");
+  assert.deepEqual(findEmbeddedBoard('<link href="https://assets-aws.teamtailor-cdn.com/x.css">', "careers.example.com"), { vendor: "teamtailor", slug: "careers.example.com" });
+});
