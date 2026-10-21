@@ -684,7 +684,7 @@ let jobsRenderPending=false;
 function renderJobs(){
   if(document.activeElement&&document.activeElement.closest&&document.activeElement.closest("#job-cards textarea, #job-cards input")){jobsRenderPending=true;return}
   refreshDomains();
-  const pool=jobs.filter(j=>!j.dismissed&&!appForJob(j.id));
+  const pool=jobs.filter(j=>!j.dismissed&&!isApplied(appForJob(j.id)));
   const nFiltered=pool.filter(isFiltered).length;
   const tf=$("toggle-filtered");if(tf){tf.hidden=!nFiltered;tf.textContent=(showFiltered?"Hide filtered":"Show filtered")+" ("+nFiltered+")";tf.setAttribute("aria-pressed",String(showFiltered))}
   const list=pool.filter(j=>showFiltered||!isFiltered(j)).slice().sort((a,b)=>(Number(b.scan_score)||0)-(Number(a.scan_score)||0)||String(b.created_at||"").localeCompare(String(a.created_at||"")));
@@ -707,12 +707,14 @@ function renderJobs(){
         ${(j.flags||[]).length?`<div class="job-flags">${j.flags.map(f=>`<span class="job-chip job-chip--flag">⚑ ${esc(localizeFlag(f,LANG))}</span>`).join("")}</div>`:""}</div></div>
         ${voted.has(j.id)?"":`<div class="job-vote cv-no-print" role="group" aria-label="Feedback"><button type="button" data-job-up="${esc(j.id)}" aria-label="Good fit" title="Good fit">👍</button><button type="button" data-job-down="${esc(j.id)}" aria-label="Not a fit" title="Not a fit">👎</button></div>`}
       </div>
-      ${app?`<div class="job-applied"><span class="job-applied__badge">✓ Applied · ${esc(String(app.applied||"").split("-").reverse().join("/"))}</span>${app.status!=="applied"?`<span class="mf-muted">Status: ${esc(app.status)}</span>`:""}</div>`:""}
+      ${app&&!isApplied(app)?`<div class="job-applied job-considering"><span class="job-considering__badge">★ Considering${app.applied?" · since "+esc(String(app.applied).split("-").reverse().join("/")):""}</span>${app.cv?`<span class="mf-muted">CV: ${esc(app.cv)}</span>`:""}</div>
+        ${(app.events||[]).length?`<ul class="job-history">${app.events.map(ev=>`<li><time>${esc(String(ev.d||"").split("-").reverse().join("/"))}</time> ${esc(ev.t||"")}</li>`).join("")}</ul>`:""}`:""}
+      ${isApplied(app)?`<div class="job-applied"><span class="job-applied__badge">✓ Applied · ${esc(String(app.applied||"").split("-").reverse().join("/"))}</span>${app.status!=="applied"?`<span class="mf-muted">Status: ${esc(app.status)}</span>`:""}</div>`:""}
       ${sal?`<div>${sal}</div>`:""}
       <div class="job-card__actions cv-no-print">
         ${j.posting?`<a class="mf-btn mf-btn--ghost" href="${esc(j.posting)}" target="_blank" rel="noopener">View posting</a>`:""}
         <button type="button" class="mf-btn mf-btn--primary" data-job-process="${esc(j.id)}">Tailor CV</button>
-        ${app?`<button type="button" class="mf-btn mf-btn--ghost" data-job-open-app="${esc(app.id)}">View application</button><button type="button" class="mf-btn mf-btn--ghost" data-job-unapply="${esc(j.id)}">Undo applied</button>`:`<button type="button" class="mf-btn mf-btn--ghost job-apply-btn" data-job-apply="${esc(j.id)}">I applied</button>`}
+        ${isApplied(app)?`<button type="button" class="mf-btn mf-btn--ghost" data-job-open-app="${esc(app.id)}">View application</button><button type="button" class="mf-btn mf-btn--ghost" data-job-unapply="${esc(j.id)}">Undo applied</button>`:`<button type="button" class="mf-btn mf-btn--ghost job-apply-btn" data-job-apply="${esc(j.id)}">I applied</button>`}
         ${j.cv_md?`<button type="button" class="mf-btn mf-btn--ghost" data-word-job-cv="${esc(j.id)}">Download Word</button>`:""}
         <button type="button" class="mf-btn mf-btn--ghost" data-job-answers="${esc(j.id)}">${j.answers&&j.answers.questions?.length?"Answers":"Prepare answers"}</button>
         <button type="button" class="mf-btn mf-btn--ghost" data-job-toggle="${esc(j.id)}">${open?"Close":"Details"}</button>
@@ -743,14 +745,35 @@ function renderJobs(){
 
 function setWrapW(){const w=document.querySelector("#view-applications .tablewrap");if(w&&w.clientWidth)w.style.setProperty("--jk-wrap-w",w.clientWidth+"px")}
 window.addEventListener("resize",setWrapW);
+// Statuses before an application is sent. These live on the Jobs tab, not in Applications.
+const PRE_APPLY=["considering"];
+const isApplied=a=>Boolean(a)&&!PRE_APPLY.includes(a.status);
+const appliedApps=()=>apps.filter(isApplied);
+// Give every pre-application entry without a job card a manual card, so it shows up in Jobs (keeps the entry, CV and history).
+let linkingConsidering=false;
+async function linkConsideringToJobs(){
+  if(!db||DEMO||linkingConsidering)return;
+  const orphans=apps.filter(a=>!isApplied(a)&&!a.job_id);if(!orphans.length)return;
+  linkingConsidering=true;
+  try{for(const a of orphans){const jobId="manual-"+a.id;
+    if(!jobs.find(j=>j.id===jobId))await db.doc("jobs/"+jobId).update({company:a.company,role:a.role,posting:a.posting||"",posting_text:a.posting_text||"",source:"manual",cv_md:a.cv_md||"",answers:a.answers||null});
+    await db.doc("apps/"+a.id).update({job_id:jobId});}}
+  catch(err){console.warn("Could not link considering entries",err)}
+  finally{linkingConsidering=false}
+}
 function appForJob(jobId){return apps.find(a=>a.job_id===jobId)||apps.find(a=>a.id==="job-"+jobId)||null}
 const applyBusy=new Set();
 async function markApplied(jobId){
   const j=jobs.find(x=>x.id===jobId);if(!j||!db||applyBusy.has(jobId))return;
-  if(appForJob(jobId)){toast("This job is already in Applications");renderJobs();return}
+  const prior=appForJob(jobId);
+  if(isApplied(prior)){toast("This job is already in Applications");renderJobs();return}
   applyBusy.add(jobId);
   const d=todayISO(),id="job-"+jobId;
   try{
+    if(prior){
+      await db.doc("apps/"+prior.id).update({status:"applied",applied:d,last:d,cv_md:prior.cv_md||j.cv_md||"",answers:prior.answers||j.answers||null,events:[...(prior.events||[]),{d,t:"Applied (logged from the job card)"}]});
+      postFeedback(jobId,"apply").catch(()=>{});toast("Moved to Applications");return;
+    }
     await db.doc("apps/"+id).set({company:j.company,role:j.role,applied:d,last:d,status:"applied",posting:j.posting||"",posting_text:j.posting_text||"",
       cv:"",cv_md:j.cv_md||"",answers:j.answers||null,job_id:jobId,events:[{d,t:"Applied (logged from the job card)"}]});
     postFeedback(jobId,"apply").catch(()=>{});
@@ -771,6 +794,8 @@ function appAnswersHtml(a){
 }
 
 function render(){
+  linkConsideringToJobs();
+  const apps=appliedApps();
   refreshDomains();
   const upd=$("tracker-updated");
   if(upd)upd.textContent="Updated "+fmtDate(todayISO());
@@ -794,7 +819,7 @@ function render(){
     : `<li class="empty">${apps.length?"Nothing has gone quiet.":"No applications loaded yet."}</li>`;
 
   const counts={all:apps.length};STATUSES.forEach(s=>counts[s]=apps.filter(a=>a.status===s).length);
-  $("chips").innerHTML=["all",...STATUSES].filter(s=>s==="all"||s==="considering"||counts[s]).map(s=>
+  $("chips").innerHTML=["all",...STATUSES.filter(s=>!PRE_APPLY.includes(s))].filter(s=>s==="all"||counts[s]).map(s=>
     `<button type="button" class="chip mf-btn mf-btn--ghost" data-f="${s}" aria-pressed="${filter===s}">${chipLabel(s)} ${counts[s]??0}</button>`).join("");
 
   const list=apps.filter(a=>filter==="all"||a.status===filter)
@@ -1107,7 +1132,7 @@ $("addform").addEventListener("submit",async e=>{
   await write(id,()=>db.doc("apps/"+id).set(body));
   e.target.reset();e.target.hidden=true;$("addtoggle").setAttribute("aria-expanded","false");
   const follow=body.posting&&status!=="considering";
-  toast(follow?"Saved "+company+". It will be followed for new roles at the next sync.":"Saved "+company);
+  toast(status==="considering"?"Saved "+company+" to Jobs as considering.":follow?"Saved "+company+". It will be followed for new roles at the next sync.":"Saved "+company);
 });
 
 function createDemoDb(){
