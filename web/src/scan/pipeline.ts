@@ -370,6 +370,13 @@ export async function runJobScan(
   };
 }
 
+const ENTITIES: Record<string, string> = { "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&amp;": "&", "&nbsp;": " " };
+
+/** Decode common HTML entities in one pass, so "&amp;lt;" becomes "&lt;" and not "<". */
+export function decodeEntities(s: string): string {
+  return s.replace(/&(?:lt|gt|quot|#39|amp|nbsp);/g, (m) => ENTITIES[m]);
+}
+
 /** Resolve a posting URL (ATS link or a company careers page backed by Ashby) to one opening with full text. */
 async function resolvePosting(url: string, companyFor: (vendor: string, slug: string) => string): Promise<RawOpening> {
   const u = new URL(url);
@@ -381,15 +388,15 @@ async function resolvePosting(url: string, companyFor: (vendor: string, slug: st
     const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(id)}`, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`Greenhouse ${res.status}`);
     const job = (await res.json()) as Record<string, unknown>;
-    // &amp; last, so "&amp;lt;" becomes "&lt;" rather than being decoded twice into "<".
-    const html = String(job.content ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+    // Greenhouse escapes its HTML once: decode that layer, strip tags, then decode the text's own entities.
+    const html = decodeEntities(String(job.content ?? ""));
     return {
       externalKey: `greenhouse:${slug}:${id}`,
       company: companyFor("greenhouse", slug),
       title: String(job.title ?? ""),
       url,
       location: String((job.location as { name?: string } | undefined)?.name ?? ""),
-      description: html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim(),
+      description: decodeEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim(),
       source: "import",
       vendor: "greenhouse",
     };
