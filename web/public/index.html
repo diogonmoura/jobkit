@@ -203,7 +203,7 @@ const section=(key,title,body,extra="")=>`<details class="jk-section" data-sec="
 document.addEventListener("toggle",e=>{const d=e.target;if(!d.dataset||!d.dataset.sec)return;if(d.open){openSections.add(d.dataset.sec);autogrowAll(d)}else openSections.delete(d.dataset.sec)},true);
 let voted=new Map(),scanTargets=[],showFiltered=false;
 const isFiltered=j=>Boolean(j.suitability&&j.suitability.ok===false);
-const VENDOR={greenhouse:"Greenhouse",lever:"Lever","lever-eu":"Lever (EU)",ashby:"Ashby",workable:"Workable","remote-com":"Remote.com"};
+const VENDOR={greenhouse:"Greenhouse",lever:"Lever","lever-eu":"Lever (EU)",ashby:"Ashby",workable:"Workable","remote-com":"Remote.com",teamtailor:"Teamtailor"};
 // Per-company chips on the Following tab: HQ (optional setting on the scan target) and matching open jobs.
 function openJobsFor(company){const k=normCo(company);return jobs.filter(j=>!j.dismissed&&!appForJob(j.id)&&!isFiltered(j)&&normCo(j.company)===k).length}
 function industryFor(company){const k=normCo(company);const t=scanTargets.find(x=>normCo(x.company)===k&&x.industry);return t?t.industry:""}
