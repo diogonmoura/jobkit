@@ -686,3 +686,4 @@ td.co .co-line{align-items:center}
 .pill button:hover,.pill button:focus-visible{background:color-mix(in srgb,var(--mf-text) 12%,transparent);color:var(--mf-text)}
 .pill-input input.pill-input__field{flex:1;min-width:8rem;border:0;background:transparent;outline:0;box-shadow:none;padding:.2rem;font:inherit;color:inherit;width:auto}
 .pref-hint{font-size:var(--mf-text-xs,.78rem);color:var(--mf-text-muted);font-weight:400}
+.pref-grid{align-items:start}

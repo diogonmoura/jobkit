@@ -669,7 +669,7 @@ async function unmarkApplied(jobId){
 }
 function appAnswersHtml(a){
   const qs=(a.answers&&a.answers.questions)||[];if(!qs.length)return"";
-  return `<div class="mf-card mf-glass detail-panel detail-panel--wide"><h2 class="tracker-section-title">Submitted answers</h2><dl class="app-answers">${qs.map(q=>`<dt>${esc(q.label||q.question||"")}</dt><dd>${esc(q.answer||"").replace(/\n/g,"<br/>")}</dd>`).join("")}</dl></div>`;
+  return `<div class="detail-panel--wide">${section("app-answers-"+a.id,"Submitted answers",`<dl class="app-answers">${qs.map(q=>`<dt>${esc(q.label||q.question||"")}</dt><dd>${esc(q.answer||"").replace(/\n/g,"<br/>")}</dd>`).join("")}</dl>`,qs.length+" answers")}</div>`;
 }
 
 function render(){

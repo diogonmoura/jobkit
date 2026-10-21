@@ -230,6 +230,7 @@ export default {
   "ghosted": "sem resposta"
  },
  "patterns": [
+  ["^(\\d+) answers$", "$1 respostas"],
   ["^scanned (.+)$", "pesquisada a $1"],
   ["^Remote: fully remote$", "Remoto: totalmente remoto"],
   ["^Remote: hybrid$", "Remoto: híbrido"],
