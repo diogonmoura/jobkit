@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import type { Env } from "./types";
 import { createServiceSupabase } from "./auth";
 
@@ -17,11 +18,13 @@ export type ChatResult = {
   costUsd: number;
 };
 
-export type LlmProvider = "openrouter" | "openai" | "custom";
+export type LlmProvider = "openrouter" | "openai" | "anthropic" | "custom";
 
 export const PROVIDERS: Record<LlmProvider, { label: string; baseUrl: string; defaultModel: string }> = {
   openrouter: { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", defaultModel: "google/gemini-2.5-flash" },
   openai: { label: "OpenAI", baseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4o-mini" },
+  // Claude through the Anthropic API (an API key, not a Claude subscription). Models come from claudeModel().
+  anthropic: { label: "Claude", baseUrl: "https://api.anthropic.com", defaultModel: "" },
   custom: { label: "OpenAI-compatible", baseUrl: "", defaultModel: "" },
 };
 
@@ -34,6 +37,9 @@ const MODEL_RATES: Record<string, { in: number; out: number }> = {
   "openai/gpt-4o-mini": { in: 0.15, out: 0.6 },
   "openai/gpt-4o-mini:online": { in: 0.15, out: 0.6 },
   "gpt-4o-mini": { in: 0.15, out: 0.6 },
+  "claude-haiku-5-5": { in: 0.1, out: 0.5 },
+  "claude-sonnet-5-5": { in: 2, out: 10 },
+  "claude-opus-5-5": { in: 4, out: 20 },
 };
 
 function estimateCost(model: string, prompt: number, completion: number): number {
@@ -139,6 +145,15 @@ async function loadExternalKey(env: Env, userId: string): Promise<string | null>
 
 /** Cheap call that proves a key works: lists models (no tokens spent). */
 export async function testLlmKey(s: LlmSettings): Promise<{ ok: boolean; detail: string }> {
+  if (s.provider === "anthropic") {
+    try {
+      await new Anthropic({ apiKey: s.apiKey }).models.list({ limit: 1 });
+      return { ok: true, detail: "Anthropic key accepted" };
+    } catch (error) {
+      if (error instanceof Anthropic.APIError) return { ok: false, detail: `anthropic answered HTTP ${error.status}` };
+      throw error;
+    }
+  }
   const base = s.baseUrl.replace(/\/+$/, "");
   const url = s.provider === "openrouter" ? `${base}/key` : `${base}/models`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${s.apiKey}` } });
@@ -147,9 +162,77 @@ export async function testLlmKey(s: LlmSettings): Promise<{ ok: boolean; detail:
 }
 
 function modelFor(s: LlmSettings, requested: string): string {
+  if (s.provider === "anthropic") return claudeModel(requested, s.model);
   if (s.model) return s.model;
   if (s.provider === "openrouter") return requested;
   return PROVIDERS[s.provider].defaultModel || requested.replace(/:online$/, "").split("/").pop() || requested;
+}
+
+/**
+ * Callers ask for OpenRouter-style models by tier: "flash"/"flash-lite" for cheap work (scoring, checks),
+ * "pro" for CVs and application answers, and ":online" for web-backed answers (salary). On Claude the cheap
+ * tier runs on Haiku and the rest on Opus. A model saved in setup overrides this.
+ */
+export function claudeModel(requested: string, override: string): string {
+  if (override) return override;
+  return /-pro\b|:online$/.test(requested) ? "claude-opus-5-5" : "claude-haiku-5-5";
+}
+
+const JSON_ONLY = "Reply with only a single JSON object: no prose and no code fences.";
+// Refusal fallbacks re-run a declined request on another model in the same call. Haiku has none.
+const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-sonnet-5-5"]);
+
+export function anthropicParams(
+  model: string,
+  messages: ChatMessage[],
+  jsonMode: boolean,
+  online: boolean,
+): Anthropic.Beta.Messages.MessageCreateParamsNonStreaming {
+  const system = [...messages.filter((m) => m.role === "system").map((m) => m.content), ...(jsonMode ? [JSON_ONLY] : [])];
+  return {
+    model,
+    max_tokens: 16000,
+    ...(system.length ? { system: system.join("\n\n") } : {}),
+    messages: messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+    ...(online ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 5 }] } : {}),
+    ...(FALLBACK_MODELS.has(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
+  };
+}
+
+export function anthropicText(content: readonly { type: string; text?: string }[]): string {
+  return content
+    .filter((b) => b.type === "text")
+    .map((b) => b.text ?? "")
+    .join("")
+    .trim();
+}
+
+async function claudeMessages(
+  s: LlmSettings,
+  model: string,
+  messages: ChatMessage[],
+  jsonMode: boolean,
+  online: boolean,
+): Promise<ChatResult> {
+  const client = new Anthropic({ apiKey: s.apiKey });
+  const params = anthropicParams(model, messages, jsonMode, online);
+  let response = await client.beta.messages.create(params);
+  let promptTokens = response.usage.input_tokens;
+  let completionTokens = response.usage.output_tokens;
+  // Web search can pause a long turn; sending the turn back lets it finish.
+  for (let i = 0; i < 3 && response.stop_reason === "pause_turn"; i++) {
+    response = await client.beta.messages.create({
+      ...params,
+      messages: [...params.messages, { role: "assistant", content: response.content }],
+    });
+    promptTokens += response.usage.input_tokens;
+    completionTokens += response.usage.output_tokens;
+  }
+  if (response.stop_reason === "refusal") throw new Error("Claude declined this request");
+  const content = anthropicText(response.content);
+  return { content, model: response.model, promptTokens, completionTokens, costUsd: estimateCost(model, promptTokens, completionTokens) };
 }
 
 async function chatCompletions(
@@ -186,7 +269,11 @@ export async function completeChat(
 ): Promise<ChatResult> {
   const settings = await loadLlmSettings(env, opts.userId);
   if (!settings) throw new Error("No LLM key configured: add one in Setup (/setup) or set OPENROUTER_API_KEY on the Worker.");
-  const model = modelFor(settings, opts.model ?? "google/gemini-2.5-flash-lite");
+  const requested = opts.model ?? "google/gemini-2.5-flash-lite";
+  const model = modelFor(settings, requested);
+  if (settings.provider === "anthropic") {
+    return stripFences(await claudeMessages(settings, model, opts.messages, opts.json ?? false, requested.endsWith(":online")));
+  }
   return stripFences(await chatCompletions(env, settings, model, opts.messages, opts.json ?? false));
 }
 
