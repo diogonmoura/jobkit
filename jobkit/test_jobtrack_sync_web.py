@@ -41,11 +41,11 @@ class FakeWeb:
 
     def pull_apps(self, user_id):
         # Like jobkit_web.Client: tracker fields only; rows with web-only data and shortlisted rows noted.
-        docs, self.web_only_keys, self.hidden_keys = {}, set(), set()
+        docs, self.web_only_keys, self.hidden_keys = {}, set(), {}
         for i, r in self.rows.items():
             key = (r["company"], r["role"])
             if r.get("status") == "considering":
-                self.hidden_keys.add(key)
+                self.hidden_keys[key] = (i, r["updated_at"])
                 continue
             if any(r.get(f) for f in ("cv_md", "posting_text", "answers", "job_id")):
                 self.web_only_keys.add(key)
@@ -226,6 +226,19 @@ class SyncWebTest(unittest.TestCase):
         self.assertEqual(self.web.rows["acme-pm-2026-09-01"]["cv_md"], "# Tailored CV")
         self.assertIn(("Acme", "PM"), self.apps())  # written back rather than lost
         self.assertIn(("Acme", "PMO"), self.apps())
+
+    def test_applying_to_a_shortlisted_job_from_the_cli_marks_the_web_row_applied(self):
+        self.web.rows["acme-shortlist"] = {"company": "Gamma", "role": "Lead", "applied": "2026-09-05", "cv": "",
+                                           "status": "considering", "last": "2026-09-05", "posting": "",
+                                           "events": [], "cv_md": "# CV", "updated_at": "t0"}
+        self.edit_md(lambda text: jobtrack.append_application(text, jobtrack.Application(
+            company="Gamma", role="Lead", applied=datetime.date(2026, 9, 6), cv="cv_gamma", status="applied",
+            last_contact=datetime.date(2026, 9, 6), posting=jobtrack.PLACEHOLDER)))
+        self.sync()
+        gamma = [r for r in self.web.rows.values() if r["company"] == "Gamma"]
+        self.assertEqual(len(gamma), 1)
+        self.assertEqual((gamma[0]["status"], gamma[0]["cv"], gamma[0]["cv_md"]), ("applied", "cv_gamma", "# CV"))
+        self.assertIn(("Gamma", "Lead"), self.apps())
 
     def test_a_row_moved_to_considering_stays_in_markdown_and_is_not_duplicated(self):
         self.sync()

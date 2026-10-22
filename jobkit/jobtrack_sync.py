@@ -276,7 +276,7 @@ def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int 
             state = json.load(handle)
     for _ in range(attempts):
         db_docs = client.pull_apps(user_id)
-        hidden = getattr(client, "hidden_keys", set())
+        hidden = getattr(client, "hidden_keys", {})
         text, new_text, merged, drop_db = _merge(md_path, db_docs, state,
                                                  protected=getattr(client, "web_only_keys", set()), hidden=hidden)
         pushed, clean = 0, True
@@ -288,9 +288,16 @@ def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int 
             pushed += 1
         for key, rec in (merged.items() if clean else ()):
             existing = db_docs.get(key)
-            if existing is None:
-                if key in hidden:  # shortlisted again in the web app: leave both sides as they are
+            if existing is None and key in hidden:
+                # A shortlisted job in the web app. Unchanged since this machine last synced it means the web
+                # app moved it back to the shortlist: leave both sides. Otherwise the application was logged
+                # here (say, by add): put it on that row, as the web app's own "I applied" does.
+                if state.get(key_str(key)) == rec:
                     continue
+                if not client.update_app_if_unchanged(user_id, hidden[key][0], hidden[key][1], rec):
+                    clean = False
+                    break
+            elif existing is None:
                 _insert_web_app(client, user_id, rec)
             elif existing[1] == rec:
                 continue

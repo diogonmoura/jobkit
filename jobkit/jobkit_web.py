@@ -107,14 +107,15 @@ class Client:
 
     def pull_apps(self, user_id: str) -> DbDocs:
         """Applications as merge records. Also notes, for the sync, which rows hold web-only data
-        (web_only_keys: never deleted by inference) and which are shortlisted jobs (hidden_keys)."""
+        (web_only_keys: never deleted by inference) and which are shortlisted jobs (hidden_keys, mapped to
+        their row id and updated_at so an application logged elsewhere can be put on that row)."""
         rows = self._call("GET", "/jobkit_apps?select=*&user_id=eq." + _quote(user_id)) or []
         docs: DbDocs = {}
-        self.web_only_keys, self.hidden_keys = set(), set()
+        self.web_only_keys, self.hidden_keys = set(), {}
         for row in rows:
             key = (row.get("company") or "", row.get("role") or "")
             if row.get("status") in WEB_ONLY_STATUSES:
-                self.hidden_keys.add(key)
+                self.hidden_keys[key] = (str(row["id"]), row.get("updated_at"))
                 continue
             if any(row.get(column) for column in WEB_ONLY_COLUMNS):
                 self.web_only_keys.add(key)
