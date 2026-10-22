@@ -43,6 +43,13 @@ class FakeWeb:
     def insert_app(self, user_id, app_id, record):
         self.rows[app_id] = dict(record, updated_at=self._tick())
 
+    def delete_app_if_unchanged(self, user_id, app_id, updated_at):
+        row = self.rows.get(app_id)
+        if row is None or row["updated_at"] != updated_at:
+            return False
+        del self.rows[app_id]
+        return True
+
     def update_app_if_unchanged(self, user_id, app_id, updated_at, record):
         if self.fail_update:
             raise WebError("HTTP 503")
@@ -163,6 +170,31 @@ class SyncWebTest(unittest.TestCase):
         self.assertEqual((acme.posting, acme.cv), ("https://jobs.example.com/1", "cv_acme_v2"))
         row = self.web.rows["acme-2026-09-01"]
         self.assertEqual((row["posting"], row["cv"]), ("https://jobs.example.com/1", "cv_acme_v2"))
+
+    def test_web_delete_removes_the_row_and_its_events_from_markdown(self):
+        self.edit_md(lambda text: jobtrack.append_event(text, "Acme", "PM", datetime.date(2026, 9, 2), "call"))
+        self.sync()
+        del self.web.rows["acme-2026-09-01"]
+        self.sync()
+        self.assertNotIn(("Acme", "PM"), self.apps())
+        self.assertNotIn("Acme", jobtrack.read_log(self.md))
+        self.assertIn(("Beta", "CoS"), self.apps())
+        self.assertNotIn("acme-2026-09-01", self.web.rows)
+
+    def test_markdown_delete_removes_the_row_from_the_web_app(self):
+        self.sync()
+        self.edit_md(lambda text: jobtrack.remove_application(text, "Beta", "CoS"))
+        self.sync()
+        self.assertNotIn("beta-2026-09-03", self.web.rows)
+        self.assertNotIn(("Beta", "CoS"), self.apps())
+
+    def test_a_delete_never_wins_over_a_newer_edit_on_the_other_side(self):
+        self.sync()
+        del self.web.rows["acme-2026-09-01"]
+        self.edit_md(lambda text: jobtrack.set_status(text, "Acme", "PM", "screening"))
+        self.sync()
+        self.assertEqual(self.apps()[("Acme", "PM")].status, "screening")
+        self.assertTrue(any(r["company"] == "Acme" for r in self.web.rows.values()))
 
     def test_a_lost_push_does_not_revert_a_web_edit(self):
         # The daily Action syncs, but its commit of applications.md plus snapshot never lands. The next run

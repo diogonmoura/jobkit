@@ -84,6 +84,14 @@ class TestClient(unittest.TestCase):
         self.assertIn("updated_at=eq.2026-10-21T10%3A00%3A00.123%2B00%3A00", url)
         self.assertEqual(opener.requests[0][2]["Prefer"], "return=representation")
 
+    def test_delete_app_is_conditional(self):
+        c, opener = client([ROW], [])
+        self.assertTrue(c.delete_app_if_unchanged(USER, "acme-2026-09-01", ROW["updated_at"]))
+        self.assertFalse(c.delete_app_if_unchanged(USER, "acme-2026-09-01", ROW["updated_at"]))
+        method, url, _, _ = opener.requests[0]
+        self.assertEqual(method, "DELETE")
+        self.assertIn("updated_at=eq.2026-10-21T10%3A00%3A00.123%2B00%3A00", url)
+
     def test_upsert_openings_adds_user(self):
         c, opener = client(None)
         c.upsert_openings(USER, [{"external_key": "k", "company": "EDP"}])

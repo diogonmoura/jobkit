@@ -466,6 +466,26 @@ def append_application(text: str, app: Application) -> str:
     return _rejoin(lines, text)
 
 
+def remove_application(text: str, company: str, role: str) -> str:
+    """Remove an application's table row and its events. Raises NotFound when it isn't there."""
+    lines = text.splitlines()
+    index = _row_index(lines, company, role)
+    if index is None:
+        raise NotFound("no application for {}{}{}".format(company, HEADING_SEPARATOR, role))
+    del lines[index]
+    heading = _heading_for(company, role)
+    start = next((i for i, line in enumerate(lines) if line.strip() == heading), None)
+    if start is not None:
+        end = start + 1
+        while end < len(lines) and not lines[end].startswith("#"):
+            end += 1
+        # Drop the blank line that separated this block from the previous one.
+        if start > 0 and not lines[start - 1].strip():
+            start -= 1
+        del lines[start:end]
+    return _rejoin(lines, text)
+
+
 def _heading_for(company: str, role: str) -> str:
     return "### {}{}{}".format(company, HEADING_SEPARATOR, role)
 

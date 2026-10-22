@@ -100,6 +100,11 @@ class Client:
         self._call("POST", "/jobkit_apps", dict({"user_id": user_id, "id": app_id}, **record),
                    prefer="return=minimal")
 
+    def delete_app_if_unchanged(self, user_id: str, app_id: str, updated_at: Optional[str]) -> bool:
+        path = "/jobkit_apps?user_id=eq.{}&id=eq.{}&updated_at=eq.{}".format(
+            _quote(user_id), _quote(app_id), _quote(updated_at or ""))
+        return bool(self._call("DELETE", path, prefer="return=representation"))
+
     def update_app_if_unchanged(self, user_id: str, app_id: str, updated_at: Optional[str], record: dict) -> bool:
         path = "/jobkit_apps?user_id=eq.{}&id=eq.{}&updated_at=eq.{}".format(
             _quote(user_id), _quote(app_id), _quote(updated_at or ""))

@@ -166,21 +166,35 @@ def apply_to_markdown(text: str, md_apps: Dict[Key, jobtrack.Application],
     return text
 
 
-def _merge(md_path: str, db_docs, state: Dict[str, dict]) -> Tuple[str, str, Dict[Key, dict]]:
-    """Merge applications.md with the database side: (old text, new text, merged records). Writes nothing."""
+def _merge(md_path: str, db_docs, state: Dict[str, dict]):
+    """Merge applications.md with the database side. Writes nothing.
+
+    Returns (old text, new text, merged records, keys to delete from the database). An application that
+    was synced before (it is in the snapshot) and is now missing on one side was deleted there, so it is
+    deleted on the other side too, unless that copy changed since the last sync: a delete never wins
+    over a newer edit.
+    """
     text = jobtrack.read_log(md_path)
     md_apps = {a.key: a for a in jobtrack.parse_log(text)}
     md_recs = {k: md_record(a) for k, a in md_apps.items()}
     merged: Dict[Key, dict] = {}
+    drop_db: List[Key] = []
     for key in sorted(set(md_recs) | set(db_docs)):
         base = state.get(key_str(key))
         if key in md_recs and key in db_docs:
             merged[key] = merge_records(base, md_recs[key], db_docs[key][1])
         elif key in md_recs:
-            merged[key] = md_recs[key]
+            if base is None or md_recs[key] != base:
+                merged[key] = md_recs[key]
+        elif base is not None and db_docs[key][1] == base:
+            drop_db.append(key)
         else:
             merged[key] = db_docs[key][1]
-    return text, apply_to_markdown(text, md_apps, merged), merged
+    new_text = apply_to_markdown(text, md_apps, merged)
+    for key in md_apps:
+        if key not in merged:
+            new_text = jobtrack.remove_application(new_text, key[0], key[1])
+    return text, new_text, merged, drop_db
 
 
 def run_sync(md_path: str, db_dir: str, state_path: str, push_dir: str,
@@ -190,13 +204,13 @@ def run_sync(md_path: str, db_dir: str, state_path: str, push_dir: str,
     if os.path.exists(state_path):
         with open(state_path, encoding="utf-8") as handle:
             state = json.load(handle)
-    text, new_text, merged = _merge(md_path, db_docs, state)
+    text, new_text, merged, drop_db = _merge(md_path, db_docs, state)
     md_changed = new_text != text
     if md_changed:
         jobtrack.write_log_atomic(md_path, new_text)
 
     os.makedirs(push_dir, exist_ok=True)
-    writes = []
+    writes = [{"op": "delete", "collection": COLLECTION, "doc_id": db_docs[key][0]} for key in drop_db]
     for key, rec in merged.items():
         existing = db_docs.get(key)
         if existing and existing[1] == rec:
@@ -238,9 +252,15 @@ def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int 
             state = json.load(handle)
     for _ in range(attempts):
         db_docs = client.pull_apps(user_id)
-        text, new_text, merged = _merge(md_path, db_docs, state)
+        text, new_text, merged, drop_db = _merge(md_path, db_docs, state)
         pushed, clean = 0, True
-        for key, rec in merged.items():
+        for key in drop_db:
+            ident, _, version = db_docs[key]
+            if not client.delete_app_if_unchanged(user_id, ident, version):
+                clean = False
+                break
+            pushed += 1
+        for key, rec in (merged.items() if clean else ()):
             existing = db_docs.get(key)
             if existing is None:
                 client.insert_app(user_id, doc_id(rec["company"], rec["applied"]), rec)
