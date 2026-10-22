@@ -148,6 +148,13 @@ def apply_to_markdown(text: str, md_apps: Dict[Key, jobtrack.Application],
             continue
         if rec["status"] != app.status:
             text = jobtrack.set_status(text, company, role, rec["status"])
+        # CV and Posting are merged fields too. Leaving them out of the file made the next sync read the
+        # stale cell as a local edit and push it back over the database's newer value.
+        md_now = md_record(app)
+        for field, column in (("cv", jobtrack.COL_CV), ("posting", jobtrack.COL_POSTING)):
+            value = rec[field]
+            if value != md_now[field] and "|" not in value and "\n" not in value:
+                text = jobtrack._set_cell(text, company, role, column, value or jobtrack.PLACEHOLDER)
         have = {(e.date.isoformat(), e.text) for e in app.events}
         for e in rec["events"]:
             if (e["d"], e["t"]) not in have:

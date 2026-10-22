@@ -153,6 +153,16 @@ class SyncWebTest(unittest.TestCase):
         self.assertEqual(self.web.rows["acme-2026-09-01"]["status"], "interview")
         self.assertEqual(self.apps()[("Acme", "PM")].status, "interview")
 
+    def test_web_edit_to_posting_and_cv_reaches_markdown_and_sticks(self):
+        self.sync()
+        self.web.web_edit("Acme", posting="https://jobs.example.com/1", cv="cv_acme_v2")
+        self.sync()
+        self.sync()
+        acme = self.apps()[("Acme", "PM")]
+        self.assertEqual((acme.posting, acme.cv), ("https://jobs.example.com/1", "cv_acme_v2"))
+        row = self.web.rows["acme-2026-09-01"]
+        self.assertEqual((row["posting"], row["cv"]), ("https://jobs.example.com/1", "cv_acme_v2"))
+
     def test_a_stale_machine_does_not_undo_another_machines_edit(self):
         # The Mac and the GitHub Action each have their own applications.md and their own snapshot, both in
         # Supabase. A copy that is merely behind must read as behind, not as a fresh edit back to the old value.
