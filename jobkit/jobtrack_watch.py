@@ -1360,6 +1360,39 @@ def filters_for(watch: Watch, defaults: Filters) -> Filters:
     )
 
 
+# Boards the web app's own scanner reads; push_postings leaves those to it.
+WEB_SCANNED_VENDORS = ("ashby", "greenhouse", "lever", "lever-eu", "workable", "teamtailor")
+
+
+def push_postings(watchlist: Watchlist, client, user_id: str, fetch=None,
+                  timeout: int = DEFAULT_TIMEOUT) -> dict:
+    """Send current postings from boards the web app can't read to its jobkit_external_openings.
+
+    Each watched company's filters apply, as in the poll. Nothing here touches the poll's seen-state or
+    sends alerts: the web app skips postings it already has, so sending a posting again is harmless.
+    """
+    fetch = fetch or fetch_postings
+    rows, boards, skipped, errors = [], 0, 0, []
+    for entry in watchlist.watches:
+        if entry.source.vendor in WEB_SCANNED_VENDORS:
+            skipped += 1
+            continue
+        boards += 1
+        f = filters_for(entry, watchlist.defaults)
+        try:
+            postings = fetch(entry.source, timeout=timeout)
+        except Exception as error:  # one broken board must not stop the rest
+            errors.append("{}: {}".format(entry.company, error))
+            continue
+        for p in postings:
+            if matches(p.title, f.include, f.exclude, p.location, f.location):
+                rows.append({"external_key": "{}:{}".format(entry.source, p.id), "company": entry.company,
+                             "title": p.title, "url": p.url, "location": p.location or "", "description": "",
+                             "source": str(entry.source)})
+    client.upsert_openings(user_id, rows)
+    return {"pushed": len(rows), "boards": boards, "skipped_web_boards": skipped, "errors": errors}
+
+
 @dataclass
 class PollResult:
     company: str

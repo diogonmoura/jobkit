@@ -44,6 +44,24 @@ wizard at `/setup` connects the database and an AI model (OpenRouter by
 default) and turns your preferences into the profile, rubric and filters, so
 no personal data lives in the code. See [`web/README.md`](web/README.md).
 
+To use it alongside this plugin, set `[tracker] backend = "web"` and
+`supabase_url` in `jobkit.toml` and put the Supabase secret key in
+`SUPABASE_SECRET_KEY` (or the env file named by `supabase_env`, default
+`~/.jobkit/supabase.env`; never in `jobkit.toml`). Then:
+
+- `sync web` keeps `applications.md` and the web app's applications in
+  two-way sync, with the same merge rules as the artifact tracker. `add`, `log`,
+  `stale` and `stats` sync on their own; offline they warn once and carry on.
+  Each machine keeps its own sync snapshot next to `applications.md`
+  (`.jobkit-web-sync-<machine>.json`, named by `JOBKIT_MACHINE`,
+  `[tracker] machine`, or the hostname).
+- `watch push-postings` sends current postings from watched boards the web app
+  can't read (SuccessFactors, Workday, SmartRecruiters and the rest) to it; its
+  daily scan scores them like its own.
+- [`templates/github-actions/jobkit-daily.yml`](templates/github-actions/jobkit-daily.yml)
+  runs both every morning from your private data repo, so no laptop needs to
+  be on.
+
 ## Commands
 
 Skills call these for you. Run them yourself as
@@ -95,7 +113,9 @@ channel = "console"    # or "telegram"
 telegram_env = "~/.claude/channels/telegram/.env"
 
 [tracker]
-artifact_url = ""
+backend = ""            # "artifact", "web", or empty for none
+artifact_url = ""       # backend = "artifact": the claude.ai tracker page
+supabase_url = ""       # backend = "web": https://<ref>.supabase.co
 ```
 
 ## CV data

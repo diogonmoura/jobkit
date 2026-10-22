@@ -339,14 +339,30 @@ export function createJobkitDb(supabase, userId) {
       return {
         async update(fields) {
           const existing = appsCache.find((a) => a.id === id);
-          const merged = { ...(existing ?? { id }), ...fields };
-          if (merged.status === undefined && existing) merged.status = existing.status;
-          const row = appToRow(userId, id, merged);
-          const { error } = await supabase
+          if (!existing || !existing._updatedAt) {
+            const merged = { ...(existing ?? { id }), ...fields };
+            if (merged.status === undefined && existing) merged.status = existing.status;
+            const { error } = await supabase
+              .from("jobkit_apps")
+              .upsert(appToRow(userId, id, merged), { onConflict: "user_id,id" });
+            if (error) throw error;
+            await loadApps();
+            return;
+          }
+          // Send only what changed, and only if the row is still the one this page read: the jobkit engine
+          // syncs applications.md into this table too, and a whole-row write from a stale cache would undo it.
+          const patch = {};
+          for (const key of APP_COLUMNS) if (fields[key] !== undefined) patch[key] = fields[key];
+          const { data, error } = await supabase
             .from("jobkit_apps")
-            .upsert(row, { onConflict: "user_id,id" });
+            .update(patch)
+            .eq("user_id", userId)
+            .eq("id", id)
+            .eq("updated_at", existing._updatedAt)
+            .select("id");
           if (error) throw error;
           await loadApps();
+          if (!data || !data.length) throw new Error("This application changed elsewhere; it has been reloaded, so try again");
         },
         async delete() {
           const { error } = await supabase
@@ -388,8 +404,11 @@ function rowToApp(row) {
     events: row.events ?? [],
     job_id: row.job_id ?? null,
     answers: row.answers ?? null,
+    _updatedAt: row.updated_at ?? null,
   };
 }
+
+const APP_COLUMNS = ["company", "role", "applied", "cv", "cv_md", "posting_text", "status", "last", "posting", "events", "job_id", "answers"];
 
 function rowToJob(row) {
   return {

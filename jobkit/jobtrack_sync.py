@@ -148,6 +148,13 @@ def apply_to_markdown(text: str, md_apps: Dict[Key, jobtrack.Application],
             continue
         if rec["status"] != app.status:
             text = jobtrack.set_status(text, company, role, rec["status"])
+        # CV and Posting are merged fields too. Leaving them out of the file made the next sync read the
+        # stale cell as a local edit and push it back over the database's newer value.
+        md_now = md_record(app)
+        for field, column in (("cv", jobtrack.COL_CV), ("posting", jobtrack.COL_POSTING)):
+            value = rec[field]
+            if value != md_now[field] and "|" not in value and "\n" not in value:
+                text = jobtrack._set_cell(text, company, role, column, value or jobtrack.PLACEHOLDER)
         have = {(e.date.isoformat(), e.text) for e in app.events}
         for e in rec["events"]:
             if (e["d"], e["t"]) not in have:
@@ -159,34 +166,53 @@ def apply_to_markdown(text: str, md_apps: Dict[Key, jobtrack.Application],
     return text
 
 
-def run_sync(md_path: str, db_dir: str, state_path: str, push_dir: str,
-             versions: Optional[Dict[str, int]] = None) -> dict:
+def _merge(md_path: str, db_docs, state: Dict[str, dict], protected=frozenset(), hidden=frozenset()):
+    """Merge applications.md with the database side. Writes nothing.
+
+    Returns (old text, new text, merged records, keys to delete from the database). An application that
+    was synced before (it is in the snapshot) and is now missing on one side was deleted there, so it is
+    deleted on the other side too, unless that copy changed since the last sync: a delete never wins
+    over a newer edit. Database rows in `protected` (holding data only the database has) are never
+    deleted that way; they are written back to the file instead. Keys in `hidden` exist in the database
+    under a status the file doesn't track, so their file rows are kept as they are.
+    """
     text = jobtrack.read_log(md_path)
     md_apps = {a.key: a for a in jobtrack.parse_log(text)}
     md_recs = {k: md_record(a) for k, a in md_apps.items()}
-    db_docs = load_db_dir(db_dir, versions or {})
-    state: Dict[str, dict] = {}
-    if os.path.exists(state_path):
-        with open(state_path, encoding="utf-8") as handle:
-            state = json.load(handle)
-
     merged: Dict[Key, dict] = {}
+    drop_db: List[Key] = []
     for key in sorted(set(md_recs) | set(db_docs)):
         base = state.get(key_str(key))
         if key in md_recs and key in db_docs:
             merged[key] = merge_records(base, md_recs[key], db_docs[key][1])
         elif key in md_recs:
-            merged[key] = md_recs[key]
+            if key in hidden or base is None or md_recs[key] != base:
+                merged[key] = md_recs[key]
+        elif base is not None and db_docs[key][1] == base and key not in protected:
+            drop_db.append(key)
         else:
             merged[key] = db_docs[key][1]
-
     new_text = apply_to_markdown(text, md_apps, merged)
+    for key in md_apps:
+        if key not in merged:
+            new_text = jobtrack.remove_application(new_text, key[0], key[1])
+    return text, new_text, merged, drop_db
+
+
+def run_sync(md_path: str, db_dir: str, state_path: str, push_dir: str,
+             versions: Optional[Dict[str, int]] = None) -> dict:
+    db_docs = load_db_dir(db_dir, versions or {})
+    state: Dict[str, dict] = {}
+    if os.path.exists(state_path):
+        with open(state_path, encoding="utf-8") as handle:
+            state = json.load(handle)
+    text, new_text, merged, drop_db = _merge(md_path, db_docs, state)
     md_changed = new_text != text
     if md_changed:
         jobtrack.write_log_atomic(md_path, new_text)
 
     os.makedirs(push_dir, exist_ok=True)
-    writes = []
+    writes = [{"op": "delete", "collection": COLLECTION, "doc_id": db_docs[key][0]} for key in drop_db]
     for key, rec in merged.items():
         existing = db_docs.get(key)
         if existing and existing[1] == rec:
@@ -206,6 +232,89 @@ def run_sync(md_path: str, db_dir: str, state_path: str, push_dir: str,
     with open(state_path + ".pending", "w", encoding="utf-8") as handle:
         json.dump(pending, handle, indent=1, sort_keys=True)
     return {"md_changed": md_changed, "writes": writes, "records": len(merged)}
+
+
+def web_app_id(company: str, role: str, applied: str) -> str:
+    """Id for an application the engine adds to the web app. The role keeps two roles at one company on one
+    day apart; the artifact's company-and-date id did not."""
+    return "{}-{}-{}".format(slug(company), slug(role), applied)[:120]
+
+
+def _insert_web_app(client, user_id: str, rec: dict) -> None:
+    """Insert under a free id: a taken one (say, a shortlisted job the pull leaves out) gets a suffix
+    instead of failing every sync from then on."""
+    import jobkit_web
+
+    base = web_app_id(rec["company"], rec["role"], rec["applied"])
+    for n in range(1, 10):
+        try:
+            client.insert_app(user_id, base if n == 1 else "{}-{}".format(base, n), rec)
+            return
+        except jobkit_web.WebError as error:
+            if error.status != 409:
+                raise
+    raise jobkit_web.WebError("no free id for {}".format(base))
+
+
+def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int = 3) -> dict:
+    """Two-way sync of applications.md with the web app's jobkit_apps.
+
+    Each machine (a laptop, a scheduled GitHub Action) merges against its own snapshot of what it last
+    synced, in a file next to applications.md. A shared snapshot would make a copy that is merely behind
+    look like an edit back to the old value. A runner without a disk commits the snapshot together with
+    applications.md, so if that commit is lost both go back together and nothing reads as an edit.
+
+    Each attempt pulls, merges and pushes what changed; an update that matches no row means the web app
+    edited it after the pull, so the attempt starts over instead of overwriting it. applications.md and
+    the snapshot are written only once every push landed.
+    """
+    import jobkit_web
+
+    state: Dict[str, dict] = {}
+    if os.path.exists(state_path):
+        with open(state_path, encoding="utf-8") as handle:
+            state = json.load(handle)
+    for _ in range(attempts):
+        db_docs = client.pull_apps(user_id)
+        hidden = getattr(client, "hidden_keys", {})
+        text, new_text, merged, drop_db = _merge(md_path, db_docs, state,
+                                                 protected=getattr(client, "web_only_keys", set()), hidden=hidden)
+        pushed, clean = 0, True
+        for key in drop_db:
+            ident, _, version = db_docs[key]
+            if not client.delete_app_if_unchanged(user_id, ident, version):
+                clean = False
+                break
+            pushed += 1
+        for key, rec in (merged.items() if clean else ()):
+            existing = db_docs.get(key)
+            if existing is None and key in hidden:
+                # A shortlisted job in the web app. Unchanged since this machine last synced it means the web
+                # app moved it back to the shortlist: leave both sides. Otherwise the application was logged
+                # here (say, by add): put it on that row, as the web app's own "I applied" does.
+                if state.get(key_str(key)) == rec:
+                    continue
+                if not client.update_app_if_unchanged(user_id, hidden[key][0], hidden[key][1], rec):
+                    clean = False
+                    break
+            elif existing is None:
+                _insert_web_app(client, user_id, rec)
+            elif existing[1] == rec:
+                continue
+            elif not client.update_app_if_unchanged(user_id, existing[0], existing[2], rec):
+                clean = False
+                break
+            pushed += 1
+        if clean:
+            break
+    else:
+        raise jobkit_web.WebError("conflicting edits, try again")
+    md_changed = new_text != text
+    if md_changed:
+        jobtrack.write_log_atomic(md_path, new_text)
+    jobtrack.write_log_atomic(state_path, json.dumps({key_str(k): r for k, r in merged.items()},
+                                                     indent=1, sort_keys=True))
+    return {"md_changed": md_changed, "pushed": pushed, "records": len(merged)}
 
 
 FOLLOWING = ("following", "all")
@@ -242,6 +351,45 @@ def following_write(doc: dict, push_dir: str, current: Optional[dict],
     return entry
 
 
+OFFLINE_WARNING = "warning: could not sync with the web app ({}); using local applications.md"
+
+
+def web_state_path(machine: str) -> str:
+    """This machine's sync snapshot, next to applications.md."""
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", machine).strip("-") or "default"
+    return jobkit_paths.data_file(".jobkit-web-sync-{}.json".format(safe))
+
+
+def run_web_sync(md_path: Optional[str] = None, timeout: int = 20) -> dict:
+    """`jobkit sync web`: sync this machine's applications.md with the web app. Raises WebError."""
+    import jobkit_config
+    import jobkit_web
+
+    config = jobkit_config.load()
+    client = jobkit_web.client_from_config(config, timeout=timeout)
+    return sync_web(client, client.owner_id(), md_path or jobkit_paths.data_file("applications.md"),
+                    web_state_path(jobkit_config.sync_machine(config)))
+
+
+def auto_sync_web() -> bool:
+    """Sync around a tracker command when the web app is the backend. Never raises.
+
+    Offline, a missing key or a broken config turn into one warning line and the command carries on with
+    the local file. Returns False only when a sync was due and failed.
+    """
+    import jobkit_config
+
+    try:
+        if jobkit_config.load().tracker_backend != "web":
+            return True
+        # Short timeout: around add and log, being offline should cost seconds, not minutes.
+        run_web_sync(timeout=5)
+    except Exception as error:  # nothing about syncing may stop add or log from running
+        print(OFFLINE_WARNING.format(error), file=sys.stderr)
+        return False
+    return True
+
+
 def commit(state_path: str) -> bool:
     pending = state_path + ".pending"
     if not os.path.exists(pending):
@@ -260,6 +408,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     s.add_argument("--push-dir", required=True)
     s.add_argument("--versions", help="JSON file mapping doc id to its version")
     sub.add_parser("commit")
+    sub.add_parser("web", help="sync applications.md with the web app (backend = \"web\")")
     f = sub.add_parser("following", help="print the write that refreshes the Following panel")
     f.add_argument("--push-dir", required=True)
     f.add_argument("--current", help="exported following/all document, if it exists")
@@ -271,6 +420,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             with open(args.versions, encoding="utf-8") as handle:
                 versions = json.load(handle)
         result = run_sync(args.file, args.db_dir, args.state, args.push_dir, versions)
+        print(json.dumps(result))
+        return 0
+    if args.cmd == "web":
+        import jobkit_web
+
+        try:
+            result = run_web_sync(args.file)
+        except jobkit_web.WebError as error:
+            print("error: {}".format(error), file=sys.stderr)
+            return 1
         print(json.dumps(result))
         return 0
     if args.cmd == "following":

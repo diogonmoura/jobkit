@@ -18,6 +18,8 @@ import jobkit_paths
 
 CONFIG_NAME = "jobkit.toml"
 CHANNELS = ("console", "telegram")
+BACKENDS = ("artifact", "web", "")
+SECRET_KEY_VAR = "SUPABASE_SECRET_KEY"
 
 
 class ConfigError(ValueError):
@@ -31,6 +33,10 @@ class Config:
     notify_channel: str = "console"
     telegram_env: str = "~/.claude/channels/telegram/.env"
     artifact_url: str = ""
+    tracker_backend: str = ""
+    supabase_url: str = ""
+    supabase_env: str = "~/.jobkit/supabase.env"
+    sync_machine: str = ""
 
 
 _STRING = r'"(?:[^"\\]|\\.)*"|\'[^\']*\''
@@ -166,7 +172,16 @@ def load(path: Optional[str] = None) -> Config:
         notify_channel=str(notify.get("channel", Config.notify_channel)),
         telegram_env=str(notify.get("telegram_env", Config.telegram_env)),
         artifact_url=str(tracker.get("artifact_url", "")),
+        supabase_url=str(tracker.get("supabase_url", "")),
+        supabase_env=str(tracker.get("supabase_env", Config.supabase_env)),
+        sync_machine=str(tracker.get("machine", "")),
     )
+    # Repos set up before there was a choice only have artifact_url.
+    config.tracker_backend = str(tracker.get("backend", "artifact" if config.artifact_url else ""))
+    if config.tracker_backend not in BACKENDS:
+        raise ConfigError(
+            "jobkit.toml: tracker.backend must be artifact or web, not {!r}".format(config.tracker_backend)
+        )
     if config.notify_channel not in CHANNELS:
         raise ConfigError(
             "jobkit.toml: notify.channel must be one of {}, not {!r}".format(
@@ -174,3 +189,30 @@ def load(path: Optional[str] = None) -> Config:
             )
         )
     return config
+
+
+def supabase_secret_key(config: Config) -> str:
+    """The web app's Supabase secret key: the environment first, then the env file. Never jobkit.toml."""
+    key = os.environ.get(SECRET_KEY_VAR, "").strip()
+    if key:
+        return key
+    path = os.path.expanduser(config.supabase_env)
+    if not os.path.exists(path):
+        return ""
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            name, sep, value = line.partition("=")
+            if sep and name.strip() == SECRET_KEY_VAR:
+                return value.strip().strip("'\"")
+    return ""
+
+
+def sync_machine(config: Config) -> str:
+    """This machine's name for its sync snapshot: JOBKIT_MACHINE, then [tracker] machine, then the hostname."""
+    import socket
+
+    return (os.environ.get("JOBKIT_MACHINE", "").strip() or config.sync_machine.strip()
+            or socket.gethostname() or "default")

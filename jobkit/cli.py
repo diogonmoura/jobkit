@@ -25,6 +25,9 @@ import jobkit_paths  # noqa: E402
 import jobkit_schedule  # noqa: E402
 
 OWN = ("init", "install-launcher", "plugin-root", "render", "ats-check", "file-cv", "doctor", "schedule")
+# With the web app as the tracker backend, these sync first; the ones that write sync again afterwards.
+TRACKER_READS = ("stale", "stats")
+TRACKER_WRITES = ("add", "log")
 NO_DATA_REPO_NEEDED = ("init", "install-launcher", "plugin-root", "render", "ats-check", "doctor")
 
 
@@ -111,19 +114,33 @@ def main(argv: Optional[List[str]] = None) -> int:
             except Exception as error:  # a half-written connector must not block add, log or the poll
                 print("warning: ignoring {} ({}: {})".format(
                     jobtrack_boards.LOCAL_CONNECTORS, type(error).__name__, error), file=sys.stderr)
-        if command in OWN or command in ("", "-h", "--help"):
-            return _own(argv)
-        if command == "sync":
+        if command in TRACKER_READS + TRACKER_WRITES:
             import jobtrack_sync
 
-            return jobtrack_sync.main(argv[1:])
-        import jobtrack
-
-        return jobtrack.main(argv)
+            # Offline before the command means offline after it too: one warning is enough.
+            synced = jobtrack_sync.auto_sync_web()
+            code = _dispatch(command, argv)
+            if command in TRACKER_WRITES and synced:
+                jobtrack_sync.auto_sync_web()
+            return code
+        return _dispatch(command, argv)
     except (cvdata.CvError, cvrender.RenderError, atscheck.AtsError,
             jobkit_config.ConfigError, ValueError, OSError) as error:
         print("error: {}".format(error), file=sys.stderr)
         return 1
+
+
+
+def _dispatch(command: str, argv: List[str]) -> int:
+    if command in OWN or command in ("", "-h", "--help"):
+        return _own(argv)
+    if command == "sync":
+        import jobtrack_sync
+
+        return jobtrack_sync.main(argv[1:])
+    import jobtrack
+
+    return jobtrack.main(argv)
 
 
 if __name__ == "__main__":
