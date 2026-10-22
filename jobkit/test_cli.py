@@ -169,6 +169,12 @@ class TestWebAutoSync(unittest.TestCase):
         with open(os.path.join(self.home, "applications.md"), encoding="utf-8") as handle:
             self.assertIn("| Beta | CoS |", handle.read())
 
+    def test_an_unexpected_sync_error_still_lets_the_command_run(self):
+        self.error = TypeError("bad date")
+        code, _, err = self.add()
+        self.assertEqual(code, 0)
+        self.assertIn("warning: could not sync with the web app (bad date)", err)
+
     def test_sync_web_command_reports_and_fails_loudly(self):
         code, out, _ = run(["sync", "web"], self.home)
         self.assertEqual(code, 0)

@@ -9,6 +9,7 @@ no row and the caller pulls again.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import socket
 import urllib.error
@@ -36,18 +37,30 @@ def _quote(value: str) -> str:
     return urllib.parse.quote(str(value), safe="")
 
 
-def _record(row: dict) -> dict:
-    applied = row.get("applied") or ""
+def _iso_date(value) -> Optional[str]:
+    """YYYY-MM-DD from a date or timestamp string, or None when it isn't one."""
+    text = str(value or "")[:10]
+    try:
+        return datetime.date.fromisoformat(text).isoformat()
+    except ValueError:
+        return None
+
+
+def _record(row: dict) -> Optional[dict]:
+    """The row as an applications.md record, or None when it can't be one (no usable applied date)."""
+    applied = _iso_date(row.get("applied"))
+    if not applied:
+        return None
     return {
         "company": row.get("company") or "",
         "role": row.get("role") or "",
         "applied": applied,
         "cv": row.get("cv") or "",
         "status": row.get("status") or "applied",
-        "last": row.get("last") or applied,
+        "last": _iso_date(row.get("last")) or applied,
         "posting": row.get("posting") or "",
-        "events": [{"d": e["d"], "t": e["t"]} for e in row.get("events") or []
-                   if isinstance(e, dict) and "d" in e and "t" in e],
+        "events": [{"d": _iso_date(e.get("d")), "t": str(e["t"])} for e in row.get("events") or []
+                   if isinstance(e, dict) and e.get("t") and _iso_date(e.get("d"))],
     }
 
 
@@ -97,6 +110,8 @@ class Client:
             if row.get("status") in WEB_ONLY_STATUSES:
                 continue
             record = _record(row)
+            if record is None:
+                continue
             docs[(record["company"], record["role"])] = (str(row["id"]), record, row.get("updated_at"))
         return docs
 
@@ -121,10 +136,10 @@ class Client:
                    prefer="resolution=merge-duplicates,return=minimal")
 
 
-def client_from_config(config: jobkit_config.Config) -> Client:
+def client_from_config(config: jobkit_config.Config, timeout: int = 20) -> Client:
     key = jobkit_config.supabase_secret_key(config)
     if not key:
         raise WebError("no secret key")
     if not config.supabase_url:
         raise WebError("no supabase_url in jobkit.toml")
-    return Client(config.supabase_url, key)
+    return Client(config.supabase_url, key, timeout=timeout)

@@ -69,6 +69,17 @@ class TestClient(unittest.TestCase):
                                   "events": [{"d": "2026-09-02", "t": "ack"}]})
         self.assertIn("user_id=eq.u-1", opener.requests[0][1])
 
+    def test_pull_apps_tolerates_odd_dates(self):
+        rows = [dict(ROW, last="2026-09-03T08:00:00+00:00",
+                     events=[{"d": None, "t": "x"}, {"d": "2026-09-04T10:00:00Z", "t": "call"}, {"d": "soon", "t": "y"}]),
+                dict(ROW, id="b", company="Beta", applied="not a date")]
+        c, _ = client(rows)
+        docs = c.pull_apps(USER)
+        self.assertEqual(list(docs), [("Acme", "PM")])
+        record = docs[("Acme", "PM")][1]
+        self.assertEqual(record["last"], "2026-09-03")
+        self.assertEqual(record["events"], [{"d": "2026-09-04", "t": "call"}])
+
     def test_insert_app_sends_user_and_id(self):
         c, opener = client(None)
         c.insert_app(USER, "acme-2026-09-01", {"company": "Acme"})

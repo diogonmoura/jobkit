@@ -347,13 +347,13 @@ def web_state_path(machine: str) -> str:
     return jobkit_paths.data_file(".jobkit-web-sync-{}.json".format(safe))
 
 
-def run_web_sync(md_path: Optional[str] = None) -> dict:
+def run_web_sync(md_path: Optional[str] = None, timeout: int = 20) -> dict:
     """`jobkit sync web`: sync this machine's applications.md with the web app. Raises WebError."""
     import jobkit_config
     import jobkit_web
 
     config = jobkit_config.load()
-    client = jobkit_web.client_from_config(config)
+    client = jobkit_web.client_from_config(config, timeout=timeout)
     return sync_web(client, client.owner_id(), md_path or jobkit_paths.data_file("applications.md"),
                     web_state_path(jobkit_config.sync_machine(config)))
 
@@ -365,13 +365,13 @@ def auto_sync_web() -> bool:
     the local file. Returns False only when a sync was due and failed.
     """
     import jobkit_config
-    import jobkit_web
 
     try:
         if jobkit_config.load().tracker_backend != "web":
             return True
-        run_web_sync()
-    except (jobkit_web.WebError, jobkit_config.ConfigError, OSError, ValueError) as error:
+        # Short timeout: around add and log, being offline should cost seconds, not minutes.
+        run_web_sync(timeout=5)
+    except Exception as error:  # nothing about syncing may stop add or log from running
         print(OFFLINE_WARNING.format(error), file=sys.stderr)
         return False
     return True
