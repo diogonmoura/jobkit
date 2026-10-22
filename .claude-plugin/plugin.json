@@ -1,7 +1,7 @@
 {
   "name": "jobkit",
   "description": "Tailor your CV to job postings with ATS-safe PDFs, track applications, and get alerts for new roles at companies you follow.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "author": {"name": "Diogo Moura"},
   "repository": "https://github.com/diogonmoura/jobkit",
   "license": "MIT",
