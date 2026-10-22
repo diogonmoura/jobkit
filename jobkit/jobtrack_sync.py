@@ -232,6 +232,28 @@ def run_sync(md_path: str, db_dir: str, state_path: str, push_dir: str,
     return {"md_changed": md_changed, "writes": writes, "records": len(merged)}
 
 
+def web_app_id(company: str, role: str, applied: str) -> str:
+    """Id for an application the engine adds to the web app. The role keeps two roles at one company on one
+    day apart; the artifact's company-and-date id did not."""
+    return "{}-{}-{}".format(slug(company), slug(role), applied)[:120]
+
+
+def _insert_web_app(client, user_id: str, rec: dict) -> None:
+    """Insert under a free id: a taken one (say, a shortlisted job the pull leaves out) gets a suffix
+    instead of failing every sync from then on."""
+    import jobkit_web
+
+    base = web_app_id(rec["company"], rec["role"], rec["applied"])
+    for n in range(1, 10):
+        try:
+            client.insert_app(user_id, base if n == 1 else "{}-{}".format(base, n), rec)
+            return
+        except jobkit_web.WebError as error:
+            if error.status != 409:
+                raise
+    raise jobkit_web.WebError("no free id for {}".format(base))
+
+
 def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int = 3) -> dict:
     """Two-way sync of applications.md with the web app's jobkit_apps.
 
@@ -263,7 +285,7 @@ def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int 
         for key, rec in (merged.items() if clean else ()):
             existing = db_docs.get(key)
             if existing is None:
-                client.insert_app(user_id, doc_id(rec["company"], rec["applied"]), rec)
+                _insert_web_app(client, user_id, rec)
             elif existing[1] == rec:
                 continue
             elif not client.update_app_if_unchanged(user_id, existing[0], existing[2], rec):

@@ -27,6 +27,10 @@ WEB_ONLY_STATUSES = ("considering",)
 class WebError(Exception):
     """Any failure talking to the web app's Supabase. The message is a short reason for a warning."""
 
+    def __init__(self, message: str, status: Optional[int] = None):
+        super().__init__(message)
+        self.status = status
+
 
 def _quote(value: str) -> str:
     return urllib.parse.quote(str(value), safe="")
@@ -65,7 +69,7 @@ class Client:
             with self.opener(request, timeout=self.timeout) as response:
                 raw = response.read()
         except urllib.error.HTTPError as error:
-            raise WebError("HTTP {}".format(error.code)) from None
+            raise WebError("HTTP {}".format(error.code), status=error.code) from None
         except urllib.error.URLError as error:
             raise WebError(str(error.reason)) from None
         except (socket.timeout, TimeoutError):
