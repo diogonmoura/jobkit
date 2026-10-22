@@ -166,13 +166,15 @@ def apply_to_markdown(text: str, md_apps: Dict[Key, jobtrack.Application],
     return text
 
 
-def _merge(md_path: str, db_docs, state: Dict[str, dict]):
+def _merge(md_path: str, db_docs, state: Dict[str, dict], protected=frozenset(), hidden=frozenset()):
     """Merge applications.md with the database side. Writes nothing.
 
     Returns (old text, new text, merged records, keys to delete from the database). An application that
     was synced before (it is in the snapshot) and is now missing on one side was deleted there, so it is
     deleted on the other side too, unless that copy changed since the last sync: a delete never wins
-    over a newer edit.
+    over a newer edit. Database rows in `protected` (holding data only the database has) are never
+    deleted that way; they are written back to the file instead. Keys in `hidden` exist in the database
+    under a status the file doesn't track, so their file rows are kept as they are.
     """
     text = jobtrack.read_log(md_path)
     md_apps = {a.key: a for a in jobtrack.parse_log(text)}
@@ -184,9 +186,9 @@ def _merge(md_path: str, db_docs, state: Dict[str, dict]):
         if key in md_recs and key in db_docs:
             merged[key] = merge_records(base, md_recs[key], db_docs[key][1])
         elif key in md_recs:
-            if base is None or md_recs[key] != base:
+            if key in hidden or base is None or md_recs[key] != base:
                 merged[key] = md_recs[key]
-        elif base is not None and db_docs[key][1] == base:
+        elif base is not None and db_docs[key][1] == base and key not in protected:
             drop_db.append(key)
         else:
             merged[key] = db_docs[key][1]
@@ -274,7 +276,9 @@ def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int 
             state = json.load(handle)
     for _ in range(attempts):
         db_docs = client.pull_apps(user_id)
-        text, new_text, merged, drop_db = _merge(md_path, db_docs, state)
+        hidden = getattr(client, "hidden_keys", set())
+        text, new_text, merged, drop_db = _merge(md_path, db_docs, state,
+                                                 protected=getattr(client, "web_only_keys", set()), hidden=hidden)
         pushed, clean = 0, True
         for key in drop_db:
             ident, _, version = db_docs[key]
@@ -285,6 +289,8 @@ def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int 
         for key, rec in (merged.items() if clean else ()):
             existing = db_docs.get(key)
             if existing is None:
+                if key in hidden:  # shortlisted again in the web app: leave both sides as they are
+                    continue
                 _insert_web_app(client, user_id, rec)
             elif existing[1] == rec:
                 continue

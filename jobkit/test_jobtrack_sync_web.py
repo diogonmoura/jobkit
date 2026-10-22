@@ -37,9 +37,20 @@ class FakeWeb:
         self.clock += 1
         return "t{}".format(self.clock)
 
+    TRACKER_FIELDS = ("company", "role", "applied", "cv", "status", "last", "posting", "events")
+
     def pull_apps(self, user_id):
-        return {(r["company"], r["role"]): (i, {k: v for k, v in r.items() if k != "updated_at"}, r["updated_at"])
-                for i, r in self.rows.items()}
+        # Like jobkit_web.Client: tracker fields only; rows with web-only data and shortlisted rows noted.
+        docs, self.web_only_keys, self.hidden_keys = {}, set(), set()
+        for i, r in self.rows.items():
+            key = (r["company"], r["role"])
+            if r.get("status") == "considering":
+                self.hidden_keys.add(key)
+                continue
+            if any(r.get(f) for f in ("cv_md", "posting_text", "answers", "job_id")):
+                self.web_only_keys.add(key)
+            docs[key] = (i, {f: r[f] for f in self.TRACKER_FIELDS}, r["updated_at"])
+        return docs
 
     def insert_app(self, user_id, app_id, record):
         if app_id in self.rows or app_id in self.hidden_ids:
@@ -204,6 +215,24 @@ class SyncWebTest(unittest.TestCase):
         self.sync()
         self.assertEqual(self.apps()[("Acme", "PM")].status, "screening")
         self.assertTrue(any(r["company"] == "Acme" for r in self.web.rows.values()))
+
+    def test_renaming_in_markdown_never_deletes_a_web_row_with_web_only_data(self):
+        self.sync()
+        self.web.rows["acme-pm-2026-09-01"]["cv_md"] = "# Tailored CV"
+        self.web.web_edit("Acme", cv="cv_acme")  # bumps updated_at like any web write
+        self.sync()
+        self.edit_md(lambda text: text.replace("| Acme | PM |", "| Acme | PMO |"))
+        self.sync()
+        self.assertEqual(self.web.rows["acme-pm-2026-09-01"]["cv_md"], "# Tailored CV")
+        self.assertIn(("Acme", "PM"), self.apps())  # written back rather than lost
+        self.assertIn(("Acme", "PMO"), self.apps())
+
+    def test_a_row_moved_to_considering_stays_in_markdown_and_is_not_duplicated(self):
+        self.sync()
+        self.web.web_edit("Beta", status="considering")
+        self.sync()
+        self.assertIn(("Beta", "CoS"), self.apps())
+        self.assertEqual(sorted(self.web.rows), ["acme-pm-2026-09-01", "beta-cos-2026-09-03"])
 
     def test_a_lost_push_does_not_revert_a_web_edit(self):
         # The daily Action syncs, but its commit of applications.md plus snapshot never lands. The next run

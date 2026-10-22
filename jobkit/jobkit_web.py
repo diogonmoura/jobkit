@@ -23,6 +23,8 @@ Key = Tuple[str, str]
 DbDocs = Dict[Key, Tuple[str, dict, Optional[str]]]
 # Shortlisted jobs in the web app; not applications, so they stay out of applications.md.
 WEB_ONLY_STATUSES = ("considering",)
+# Columns only the web app fills (a tailored CV, answers, the posting text, the scanned job).
+WEB_ONLY_COLUMNS = ("cv_md", "posting_text", "answers", "job_id")
 
 
 class WebError(Exception):
@@ -104,11 +106,18 @@ class Client:
         return str(owner)
 
     def pull_apps(self, user_id: str) -> DbDocs:
+        """Applications as merge records. Also notes, for the sync, which rows hold web-only data
+        (web_only_keys: never deleted by inference) and which are shortlisted jobs (hidden_keys)."""
         rows = self._call("GET", "/jobkit_apps?select=*&user_id=eq." + _quote(user_id)) or []
         docs: DbDocs = {}
+        self.web_only_keys, self.hidden_keys = set(), set()
         for row in rows:
+            key = (row.get("company") or "", row.get("role") or "")
             if row.get("status") in WEB_ONLY_STATUSES:
+                self.hidden_keys.add(key)
                 continue
+            if any(row.get(column) for column in WEB_ONLY_COLUMNS):
+                self.web_only_keys.add(key)
             record = _record(row)
             if record is None:
                 continue

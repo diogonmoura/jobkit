@@ -68,6 +68,8 @@ class TestClient(unittest.TestCase):
                                   "status": "applied", "last": "2026-09-01", "posting": "",
                                   "events": [{"d": "2026-09-02", "t": "ack"}]})
         self.assertIn("user_id=eq.u-1", opener.requests[0][1])
+        self.assertEqual(c.web_only_keys, {("Acme", "PM")})  # ROW carries cv_md
+        self.assertEqual(c.hidden_keys, {("Beta", "PM")})
 
     def test_pull_apps_tolerates_odd_dates(self):
         rows = [dict(ROW, last="2026-09-03T08:00:00+00:00",
