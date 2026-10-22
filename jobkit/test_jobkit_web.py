@@ -84,15 +84,6 @@ class TestClient(unittest.TestCase):
         self.assertIn("updated_at=eq.2026-10-21T10%3A00%3A00.123%2B00%3A00", url)
         self.assertEqual(opener.requests[0][2]["Prefer"], "return=representation")
 
-    def test_sync_state_is_per_machine(self):
-        c, opener = client([], None, [{"state": {"k": {"status": "ack"}}}])
-        self.assertEqual(c.get_sync_state(USER, "mac"), {})
-        self.assertIn("machine=eq.mac", opener.requests[0][1])
-        c.put_sync_state(USER, "github-actions", {"k": {}})
-        self.assertEqual(opener.requests[1][2]["Prefer"], "resolution=merge-duplicates")
-        self.assertEqual((opener.requests[1][3]["user_id"], opener.requests[1][3]["machine"]), (USER, "github-actions"))
-        self.assertEqual(c.get_sync_state(USER, "mac"), {"k": {"status": "ack"}})
-
     def test_upsert_openings_adds_user(self):
         c, opener = client(None)
         c.upsert_openings(USER, [{"external_key": "k", "company": "EDP"}])

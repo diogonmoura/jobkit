@@ -218,19 +218,24 @@ def run_sync(md_path: str, db_dir: str, state_path: str, push_dir: str,
     return {"md_changed": md_changed, "writes": writes, "records": len(merged)}
 
 
-def sync_web(client, user_id: str, md_path: str, machine: str, attempts: int = 3) -> dict:
+def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int = 3) -> dict:
     """Two-way sync of applications.md with the web app's jobkit_apps.
 
     Each machine (a laptop, a scheduled GitHub Action) merges against its own snapshot of what it last
-    synced, kept in the web app's Supabase (jobkit_sync_state) so a runner without a disk still has one.
-    A shared snapshot would make a copy that is merely behind look like an edit back to the old value. Each attempt pulls, merges and
-    pushes what changed; an update that matches no row means the web app edited it after the pull, so the
-    attempt starts over instead of overwriting it. applications.md and the snapshot are written only once
-    every push landed: writing them earlier would make pulled web values look like local edits next time.
+    synced, in a file next to applications.md. A shared snapshot would make a copy that is merely behind
+    look like an edit back to the old value. A runner without a disk commits the snapshot together with
+    applications.md, so if that commit is lost both go back together and nothing reads as an edit.
+
+    Each attempt pulls, merges and pushes what changed; an update that matches no row means the web app
+    edited it after the pull, so the attempt starts over instead of overwriting it. applications.md and
+    the snapshot are written only once every push landed.
     """
     import jobkit_web
 
-    state = client.get_sync_state(user_id, machine)
+    state: Dict[str, dict] = {}
+    if os.path.exists(state_path):
+        with open(state_path, encoding="utf-8") as handle:
+            state = json.load(handle)
     for _ in range(attempts):
         db_docs = client.pull_apps(user_id)
         text, new_text, merged = _merge(md_path, db_docs, state)
@@ -252,7 +257,8 @@ def sync_web(client, user_id: str, md_path: str, machine: str, attempts: int = 3
     md_changed = new_text != text
     if md_changed:
         jobtrack.write_log_atomic(md_path, new_text)
-    client.put_sync_state(user_id, machine, {key_str(k): r for k, r in merged.items()})
+    jobtrack.write_log_atomic(state_path, json.dumps({key_str(k): r for k, r in merged.items()},
+                                                     indent=1, sort_keys=True))
     return {"md_changed": md_changed, "pushed": pushed, "records": len(merged)}
 
 
@@ -293,6 +299,12 @@ def following_write(doc: dict, push_dir: str, current: Optional[dict],
 OFFLINE_WARNING = "warning: could not sync with the web app ({}); using local applications.md"
 
 
+def web_state_path(machine: str) -> str:
+    """This machine's sync snapshot, next to applications.md."""
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", machine).strip("-") or "default"
+    return jobkit_paths.data_file(".jobkit-web-sync-{}.json".format(safe))
+
+
 def run_web_sync(md_path: Optional[str] = None) -> dict:
     """`jobkit sync web`: sync this machine's applications.md with the web app. Raises WebError."""
     import jobkit_config
@@ -301,7 +313,7 @@ def run_web_sync(md_path: Optional[str] = None) -> dict:
     config = jobkit_config.load()
     client = jobkit_web.client_from_config(config)
     return sync_web(client, client.owner_id(), md_path or jobkit_paths.data_file("applications.md"),
-                    jobkit_config.sync_machine(config))
+                    web_state_path(jobkit_config.sync_machine(config)))
 
 
 def auto_sync_web() -> bool:

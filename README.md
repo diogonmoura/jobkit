@@ -52,8 +52,9 @@ To use it alongside this plugin, set `[tracker] backend = "web"` and
 - `sync web` keeps `applications.md` and the web app's applications in
   two-way sync, with the same merge rules as the artifact tracker. `add`, `log`,
   `stale` and `stats` sync on their own; offline they warn once and carry on.
-  Each machine keeps its own sync snapshot in the web app (named by
-  `JOBKIT_MACHINE`, `[tracker] machine`, or the hostname).
+  Each machine keeps its own sync snapshot next to `applications.md`
+  (`.jobkit-web-sync-<machine>.json`, named by `JOBKIT_MACHINE`,
+  `[tracker] machine`, or the hostname).
 - `watch push-postings` sends current postings from watched boards the web app
   can't read (SuccessFactors, Workday, SmartRecruiters and the rest) to it; its
   daily scan scores them like its own.

@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 20
     env:
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-      # Each machine keeps its own sync snapshot in the web app; this names the Action's.
+      # Each machine keeps its own sync snapshot next to applications.md; this names the Action's.
       JOBKIT_MACHINE: github-actions
     steps:
       - uses: actions/checkout@v4
@@ -35,12 +35,14 @@ jobs:
         run: python3 "$RUNNER_TEMP/jobkit/jobkit/cli.py" watch push-postings
       - name: Sync applications.md with the web app
         run: python3 "$RUNNER_TEMP/jobkit/jobkit/cli.py" sync web
-      - name: Commit applications.md
+      # applications.md and the Action's snapshot go in one commit: if it never lands, both stay old
+      # together and the next run still sees web edits as edits. -f because .jobkit-*.json is often ignored.
+      - name: Commit applications.md and the sync snapshot
         run: |
-          if ! git diff --quiet -- applications.md; then
+          git add -f applications.md .jobkit-web-sync-github-actions.json
+          if ! git diff --cached --quiet; then
             git config user.name "jobkit-bot"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add applications.md
             git commit -m "Sync applications.md with the web app"
             git push
           fi

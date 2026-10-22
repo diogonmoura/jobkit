@@ -1,7 +1,4 @@
-"""The web app's Supabase, as the engine sees it: applications, the shared sync snapshot, and engine postings.
-
-Each machine that syncs (a laptop, a scheduled GitHub Action) keeps its own merge snapshot in
-jobkit_sync_state, so a copy of applications.md that is merely behind reads as behind, not as an edit.
+"""The web app's Supabase, as the engine sees it: applications and postings for its scan.
 
 Talks to Supabase's REST API (PostgREST) with the secret key from jobkit_config.supabase_secret_key, which
 bypasses Row Level Security, so every query names the owner's user id itself. Stdlib only.
@@ -107,15 +104,6 @@ class Client:
         path = "/jobkit_apps?user_id=eq.{}&id=eq.{}&updated_at=eq.{}".format(
             _quote(user_id), _quote(app_id), _quote(updated_at or ""))
         return bool(self._call("PATCH", path, record, prefer="return=representation"))
-
-    def get_sync_state(self, user_id: str, machine: str) -> dict:
-        rows = self._call("GET", "/jobkit_sync_state?select=state&user_id=eq.{}&machine=eq.{}".format(
-            _quote(user_id), _quote(machine))) or []
-        return dict(rows[0].get("state") or {}) if rows else {}
-
-    def put_sync_state(self, user_id: str, machine: str, state: dict) -> None:
-        self._call("POST", "/jobkit_sync_state", {"user_id": user_id, "machine": machine, "state": state},
-                   prefer="resolution=merge-duplicates")
 
     def upsert_openings(self, user_id: str, rows: List[dict]) -> None:
         if not rows:
