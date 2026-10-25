@@ -63,7 +63,7 @@ export default {
   "Preferences": "Preferências",
   "Jobs found": "Vagas encontradas",
   "Scan now": "Procurar agora",
-  "Daily scan at 07:00 UTC. Use 👍/👎 feedback to tune your profile.": "Pesquisa diária às 07:00 UTC. Usa o feedback 👍/👎 para afinar o perfil.",
+  "Scans run at 07:00, 13:00 and 19:00 UTC, a few companies at a time. Use 👍/👎 feedback to tune your profile.": "As pesquisas correm às 07:00, 13:00 e 19:00 UTC, algumas empresas de cada vez. Usa o feedback 👍/👎 para afinar o perfil.",
   "Preference profile": "Perfil de preferências",
   "Roles (comma-separated)": "Funções (separadas por vírgulas)",
   "Seniority": "Senioridade",

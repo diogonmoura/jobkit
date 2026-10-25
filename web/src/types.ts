@@ -19,6 +19,8 @@ export interface Env {
   /** Optional: protects the first-run wizard on a public deploy until an owner exists. */
   SETUP_TOKEN?: string;
   SCAN_CRON_SECRET?: string;
+  /** Subrequests allowed per invocation: 50 on the Workers free plan (default), 1000 on paid. Sizes the scan batch. */
+  SUBREQUEST_LIMIT?: string;
   /** UI language: "en" (default) or "pt-PT". Also the language of AI-written scan reasons and flags. */
   JOBKIT_LANG?: string;
   /** Optional logo.dev publishable token (pk_…) for company logos; without it an initial is shown. */

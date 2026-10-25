@@ -15,8 +15,17 @@ import {
   salaryCacheKey,
 } from "../salary";
 
-/** Cloudflare free plan allows 50 subrequests per invocation; ~20 go to Supabase/LLM, the rest to job boards. Targets rotate. */
-const MAX_TARGETS_PER_RUN = 22;
+/**
+ * Cloudflare Workers cap subrequests per invocation (50 on the free plan, 1000 on paid; set SUBREQUEST_LIMIT to match).
+ * About 30 go to Supabase, the LLM and the two remote-job feeds; the rest go to company boards, which rotate across runs.
+ * Going over the cap makes the final writes fail, so the scan would find jobs but save none.
+ */
+const SCAN_OVERHEAD_SUBREQUESTS = 34;
+const MAX_TARGETS_PER_RUN = 60;
+export function targetsPerRun(env: Pick<Env, "SUBREQUEST_LIMIT">): number {
+  const limit = Number(env.SUBREQUEST_LIMIT) || 50;
+  return Math.max(4, Math.min(MAX_TARGETS_PER_RUN, limit - SCAN_OVERHEAD_SUBREQUESTS));
+}
 /** Default minimum score for the daily scan (profile.min_score overrides it). */
 const MAX_PER_COMPANY = 5;
 const MIN_SCORE = 50;
@@ -61,6 +70,7 @@ export function standardFlags(o: RawOpening, llm: string[], profile: PreferenceP
 
 export type ScanResult = {
   inserted: number;
+  targets?: number;
   fetched: number;
   scored: number;
   costUsd: number;
@@ -243,7 +253,7 @@ export async function runJobScan(
     .eq("user_id", userId)
     .eq("enabled", true)
     .order("last_scanned_at", { ascending: true, nullsFirst: true })
-    .limit(MAX_TARGETS_PER_RUN);
+    .limit(targetsPerRun(env));
   const targets: ScanTarget[] = (targetsRaw ?? []).map((t) => ({
     company: String(t.company),
     vendor: String(t.vendor),
@@ -378,8 +388,11 @@ export async function runJobScan(
     .select("id")
     .single();
 
+  if (insertErrors.length || runErr) console.error("jobkit scan: could not save results", { insertErrors, runLogError: runErr?.message });
+
   return {
     inserted,
+    targets: targets.length,
     fetched: fetchedAll.length,
     scored: scored.length,
     costUsd,

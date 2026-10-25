@@ -82,7 +82,7 @@ export default {
         const owner = await getOwnerId(env);
         if (!owner) return;
         await runJobScan(env, createServiceSupabase(env), owner, "cron", null);
-      })().catch(() => {}),
+      })().catch((e) => console.error("jobkit cron scan failed", e)),
     );
   },
 

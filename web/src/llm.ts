@@ -180,11 +180,25 @@ async function chatCompletions(
   return { content, model, promptTokens, completionTokens, costUsd: estimateCost(model, promptTokens, completionTokens) };
 }
 
+/**
+ * Settings looked up once per user for a short while: a scan makes several LLM calls, and each lookup costs one or
+ * two subrequests, which count against the Worker's per-invocation limit (50 on the free plan).
+ */
+const settingsCache = new Map<string, { at: number; value: Promise<LlmSettings | null> }>();
+function cachedLlmSettings(env: Env, userId: string): Promise<LlmSettings | null> {
+  const hit = settingsCache.get(userId);
+  if (hit && Date.now() - hit.at < 60_000) return hit.value;
+  const value = loadLlmSettings(env, userId);
+  settingsCache.set(userId, { at: Date.now(), value });
+  value.then((v) => { if (!v) settingsCache.delete(userId); }, () => settingsCache.delete(userId));
+  return value;
+}
+
 export async function completeChat(
   env: Env,
   opts: { request?: Request | null; userId: string; messages: ChatMessage[]; model?: string; json?: boolean },
 ): Promise<ChatResult> {
-  const settings = await loadLlmSettings(env, opts.userId);
+  const settings = await cachedLlmSettings(env, opts.userId);
   if (!settings) throw new Error("No LLM key configured: add one in Setup (/setup) or set OPENROUTER_API_KEY on the Worker.");
   const model = modelFor(settings, opts.model ?? "google/gemini-2.5-flash-lite");
   return stripFences(await chatCompletions(env, settings, model, opts.messages, opts.json ?? false));

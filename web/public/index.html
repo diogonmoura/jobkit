@@ -97,7 +97,7 @@
           <span class="mf-cluster"><button type="button" class="mf-btn mf-btn--ghost" id="toggle-filtered" aria-pressed="false" hidden>Show filtered</button>
           <button type="button" class="mf-btn mf-btn--primary" id="scan-now">Scan now</button></span>
         </div>
-        <p class="mf-muted tracker-lede" id="scan-status" aria-live="polite">Daily scan at 07:00 UTC. Use 👍/👎 feedback to tune your profile.</p>
+        <p class="mf-muted tracker-lede" id="scan-status" aria-live="polite">Scans run at 07:00, 13:00 and 19:00 UTC, a few companies at a time. Use 👍/👎 feedback to tune your profile.</p>
         <div class="mf-card mf-glass card--flush"><ul class="job-cards" id="job-cards"></ul></div>
       </section>
     </div>
@@ -991,8 +991,10 @@ $("scan-now")?.addEventListener("click",async()=>{
   if(scanBusy)return;scanBusy=true;$("scan-status").textContent="Scanning for jobs…";
   try{
     const res=await apiJson("/scan",{method:"POST"});
-    $("scan-status").textContent=`Added ${res.inserted} jobs (cost ~$${Number(res.costUsd||0).toFixed(4)}).`;
-    toast("Scan finished");
+    const errs=[...(res.insertErrors||[]),...(res.runLogError?[res.runLogError]:[])];
+    const checked=res.targets?`Checked ${res.targets} companies, ${res.fetched} postings, ${res.scored} new ones scored. `:"";
+    $("scan-status").textContent=errs.length?`${checked}Could not save the results: ${errs[0]}`:`${checked}Added ${res.inserted} jobs (cost ~$${Number(res.costUsd||0).toFixed(4)}).`;
+    toast(errs.length?"Scan finished with errors":"Scan finished");
   }catch(err){toast("Scan failed: "+(err&&err.message||err));$("scan-status").textContent="Scan failed."}
   finally{scanBusy=false}
 });

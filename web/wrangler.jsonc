@@ -13,8 +13,8 @@
     // The Worker runs first so it can gate pages behind sign-in and redirect to /setup.
     "run_worker_first": true
   },
-  // Daily job scan (UTC). Uses the owner claimed in /setup.
-  "triggers": { "crons": ["0 7 * * *"] },
+  // Job scans (UTC), three a day so the watchlist rotates through every company daily. Uses the owner claimed in /setup.
+  "triggers": { "crons": ["0 7,13,19 * * *"] },
   "vars": {
     // Fill these in (the /setup wizard prints the exact values). The publishable key is safe to commit.
     "SUPABASE_URL": "",
