@@ -35,6 +35,8 @@ export async function verifyNeonToken(token: string, env: Env, fetchImpl: typeof
     const { payload } = await jwtVerify(token, jwksFor(base, fetchImpl), {
       algorithms: ["EdDSA"],
       issuer: new URL(base).origin,
+      // A token without exp would never expire; jose only checks exp when it is present.
+      requiredClaims: ["exp", "sub"],
     });
     if (!payload.sub) return null;
     const email = typeof payload.email === "string" ? payload.email : undefined;
@@ -48,10 +50,12 @@ export async function verifyNeonToken(token: string, env: Env, fetchImpl: typeof
 export async function neonSessionUser(request: Request, env: Env, fetchImpl: typeof fetch = fetch): Promise<NeonUser | null> {
   try {
     const base = baseUrl(env);
-    if (!base) return null;
+    const cookie = request.headers.get("cookie");
+    if (!base || !cookie) return null;
     const res = await fetchImpl(`${base}/token`, {
+      signal: AbortSignal.timeout(5000),
       headers: {
-        cookie: request.headers.get("cookie") ?? "",
+        cookie,
         // Neon Auth checks Origin against its trusted domains.
         origin: new URL(request.url).origin,
       },

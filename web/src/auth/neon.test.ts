@@ -19,14 +19,15 @@ async function keyPair() {
   return { privateKey, jwks: { keys: [jwk] } };
 }
 
-function sign(key: CryptoKey | Uint8Array, alg: string, issuer: string, opts: { exp?: string; email?: string } = {}) {
-  return new SignJWT(opts.email ? { email: opts.email } : {})
+function sign(key: CryptoKey | Uint8Array, alg: string, issuer: string, opts: { exp?: string | null; email?: string } = {}) {
+  const jwt = new SignJWT(opts.email ? { email: opts.email } : {})
     .setProtectedHeader({ alg, kid: "k1" })
     .setSubject(USER)
     .setIssuer(issuer)
-    .setIssuedAt()
-    .setExpirationTime(opts.exp ?? "15m")
-    .sign(key);
+    .setIssuedAt();
+  // exp: null signs a token with no expiry at all.
+  if (opts.exp !== null) jwt.setExpirationTime(opts.exp ?? "15m");
+  return jwt.sign(key);
 }
 
 function fakeFetch(jwks: unknown, token?: string): typeof fetch {
@@ -61,6 +62,13 @@ describe("verifyNeonToken", () => {
     const { env, origin } = freshEnv();
     const { privateKey, jwks } = await keyPair();
     const token = await sign(privateKey, "EdDSA", origin, { exp: "-1m" });
+    assert.equal(await verifyNeonToken(token, env, fakeFetch(jwks)), null);
+  });
+
+  it("rejects a validly signed token without exp", async () => {
+    const { env, origin } = freshEnv();
+    const { privateKey, jwks } = await keyPair();
+    const token = await sign(privateKey, "EdDSA", origin, { exp: null });
     assert.equal(await verifyNeonToken(token, env, fakeFetch(jwks)), null);
   });
 
@@ -109,6 +117,44 @@ describe("neonSessionUser", () => {
     assert.ok(call);
     assert.equal(call.headers.get("cookie"), "session=abc");
     assert.equal(call.headers.get("origin"), "https://jobs.example.test");
+  });
+
+  it("gives up on /token after 5 seconds", async () => {
+    const { env, origin } = freshEnv();
+    const { privateKey, jwks } = await keyPair();
+    const token = await sign(privateKey, "EdDSA", origin);
+    // jose's JWKS fetch makes its own timeout signal, so map each signal to its delay.
+    const delays = new Map<AbortSignal, number>();
+    const real = AbortSignal.timeout;
+    AbortSignal.timeout = (ms: number) => {
+      const s = real.call(AbortSignal, ms);
+      delays.set(s, ms);
+      return s;
+    };
+    let signal: AbortSignal | null | undefined;
+    const inner = fakeFetch(jwks, token);
+    const spy = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/token")) signal = init?.signal;
+      return inner(input, init);
+    }) as typeof fetch;
+    try {
+      await neonSessionUser(req(), env, spy);
+    } finally {
+      AbortSignal.timeout = real;
+    }
+    assert.ok(signal instanceof AbortSignal);
+    assert.equal(delays.get(signal), 5000);
+  });
+
+  it("returns null without calling Neon when there is no Cookie header", async () => {
+    const { env } = freshEnv();
+    let calls = 0;
+    const counting = (async () => {
+      calls++;
+      return new Response("", { status: 500 });
+    }) as typeof fetch;
+    assert.equal(await neonSessionUser(new Request("https://jobs.example.test/api/x"), env, counting), null);
+    assert.equal(calls, 0);
   });
 
   it("returns null when /token answers 401", async () => {
