@@ -10,7 +10,7 @@
     "build:docx": "node scripts/build-docx-bundle.mjs",
     "predeploy": "npm run build:docx && npm run build:sql",
     "test": "tsx --test src/*.test.ts src/db/*.test.ts src/scan/*.test.ts",
-    "build:sql": "node scripts/build-setup-sql.mjs",
+    "build:sql": "node scripts/build-setup-sql.mjs && node scripts/build-postgres-sql.mjs",
     "predev": "npm run build:sql",
     "typecheck": "tsc --noEmit"
   },
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261019.1",
+    "@electric-sql/pglite": "^0.5.11",
     "esbuild": "^0.28.2",
     "playwright": "^1.64.1",
     "tsx": "^4.19.4",
