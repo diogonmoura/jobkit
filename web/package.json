@@ -9,7 +9,7 @@
     "screenshots": "node scripts/capture-screenshots.mjs",
     "build:docx": "node scripts/build-docx-bundle.mjs",
     "predeploy": "npm run build:docx && npm run build:sql",
-    "test": "tsx --test src/*.test.ts src/db/*.test.ts src/scan/*.test.ts",
+    "test": "tsx --test src/*.test.ts src/db/*.test.ts src/auth/*.test.ts src/scan/*.test.ts",
     "build:sql": "node scripts/build-setup-sql.mjs && node scripts/build-postgres-sql.mjs",
     "predev": "npm run build:sql",
     "typecheck": "tsc --noEmit"
@@ -20,6 +20,7 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.109.0",
     "docx": "^9.5.0",
+    "jose": "^6.2.13",
     "ws": "^8.22.0"
   },
   "devDependencies": {
