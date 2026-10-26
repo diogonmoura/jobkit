@@ -71,6 +71,11 @@ If both are set, `web_url` wins. Then:
 - `watch push-postings` sends current postings from watched boards the web app
   can't read (SuccessFactors, Workday, SmartRecruiters and the rest) to it; its
   daily scan scores them like its own.
+- Keep `artifact_url` set as well and `/jobkit:sync-tracker` also keeps the
+  claude.ai artifact in step: it syncs the web app, then the artifact, through
+  `applications.md`. The artifact is only reachable from a Claude session, so
+  the daily GitHub Action updates the web app alone and the artifact catches up
+  at the next session.
 - [`templates/github-actions/jobkit-daily.yml`](templates/github-actions/jobkit-daily.yml)
   runs both every morning from your private data repo, so no laptop needs to
   be on.
@@ -127,7 +132,7 @@ telegram_env = "~/.claude/channels/telegram/.env"
 
 [tracker]
 backend = ""            # "artifact", "web", or empty for none
-artifact_url = ""       # backend = "artifact": the claude.ai tracker page
+artifact_url = ""       # the claude.ai tracker page (backend = "artifact", or alongside "web")
 web_url = ""            # backend = "web", any setup: https://<your jobkit site>
 web_env = "~/.jobkit/web.env"   # file holding JOBKIT_ENGINE_TOKEN (env var wins)
 supabase_url = ""       # backend = "web", Supabase only: https://<ref>.supabase.co
