@@ -141,8 +141,10 @@ async function postgresOwner(env: Env, db: Db): Promise<string | null> {
 }
 
 /**
- * Asks Neon Auth whether it accepts this site's origin. A sign-in with an empty body is rejected
- * for its body (400) when the origin is trusted, and with INVALID_ORIGIN when it is not.
+ * Asks Neon Auth whether it accepts this site's origin. The body must be well-formed: Neon Auth
+ * validates it before the origin, so an empty body always gets a 400 VALIDATION_ERROR and never
+ * reveals an untrusted origin. With a well-formed dummy sign-in, a trusted origin is rejected for
+ * its credentials and an untrusted one with INVALID_ORIGIN.
  */
 export async function probeNeonAuth(env: Env, origin: string, fetchImpl: typeof fetch = fetch): Promise<{ reachable: boolean; originTrusted: boolean; origin: string }> {
   const base = (env.NEON_AUTH_BASE_URL ?? "").trim().replace(/\/+$/, "");
@@ -152,7 +154,7 @@ export async function probeNeonAuth(env: Env, origin: string, fetchImpl: typeof 
       method: "POST",
       signal: AbortSignal.timeout(5000),
       headers: { Origin: origin, "Content-Type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({ email: "origin-check@invalid.example", password: "origin-check-only" }),
     });
     const body = (await res.json().catch(() => null)) as { code?: unknown } | null;
     return { reachable: true, originTrusted: body?.code !== "INVALID_ORIGIN", origin };

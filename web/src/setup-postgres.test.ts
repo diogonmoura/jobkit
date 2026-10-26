@@ -62,7 +62,7 @@ describe("setup wizard on Postgres", () => {
     assert.deepEqual(body.db.neonAuth, { reachable: true, originTrusted: false, origin: "https://jobkit.example" });
   });
 
-  it("probes with the request origin and an empty JSON body", async () => {
+  it("probes with the request origin and a well-formed sign-in body", async () => {
     let seen: { url: string; init: RequestInit } | null = null;
     await probeNeonAuth(baseEnv, "https://jobkit.example", (async (url: string, init: RequestInit) => {
       seen = { url, init };
@@ -71,7 +71,9 @@ describe("setup wizard on Postgres", () => {
     assert.equal(seen!.url, `${baseEnv.NEON_AUTH_BASE_URL}/sign-in/email`);
     assert.equal(seen!.init.method, "POST");
     assert.equal((seen!.init.headers as any).Origin, "https://jobkit.example");
-    assert.equal(seen!.init.body, "{}");
+    const sent = JSON.parse(String(seen!.init.body));
+    assert.equal(typeof sent.email, "string");
+    assert.equal(typeof sent.password, "string");
   });
 
   it("marks Neon Auth unreachable when the probe throws", async () => {
