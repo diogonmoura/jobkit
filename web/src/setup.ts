@@ -1,6 +1,6 @@
 import type { Db } from "./db/types";
 import { getOwnerId, jsonResponse, safeEqual } from "./auth";
-import { neonSessionUser, type NeonUser } from "./auth/neon";
+import { neonAuthBase, neonSessionUser, type NeonUser } from "./auth/neon";
 import { dbConfigured, dbMode, serviceDb } from "./db";
 import { applyMigrations, neonRunner, pendingMigrations, type SqlRunner } from "./db/postgres";
 import { createSupabaseFromRequest } from "./db/supabase";
@@ -147,7 +147,7 @@ async function postgresOwner(env: Env, db: Db): Promise<string | null> {
  * its credentials and an untrusted one with INVALID_ORIGIN.
  */
 export async function probeNeonAuth(env: Env, origin: string, fetchImpl: typeof fetch = fetch): Promise<{ reachable: boolean; originTrusted: boolean; origin: string }> {
-  const base = (env.NEON_AUTH_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  const base = neonAuthBase(env);
   if (!base) return { reachable: false, originTrusted: true, origin };
   try {
     const res = await fetchImpl(`${base}/sign-in/email`, {
