@@ -256,7 +256,30 @@ def _insert_web_app(client, user_id: str, rec: dict) -> None:
     raise jobkit_web.WebError("no free id for {}".format(base))
 
 
-def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int = 3) -> dict:
+# The snapshot's own entry for its site. Application keys always hold a \x1f, so it can't clash with one.
+TARGET_KEY = "target"
+
+
+def _load_web_state(state_path: str, target: Optional[str], legacy_target: Optional[str]) -> Dict[str, dict]:
+    """This machine's snapshot as the merge base: empty when it was synced with another site than `target`."""
+    import jobkit_web
+
+    if not os.path.exists(state_path):
+        return {}
+    with open(state_path, encoding="utf-8") as handle:
+        state = json.load(handle)
+    synced_with = state.pop(TARGET_KEY, None)
+    if not target:
+        return state
+    if synced_with is None:
+        synced_with = legacy_target
+    if not synced_with or jobkit_web.normalize_target(synced_with) != jobkit_web.normalize_target(target):
+        return {}
+    return state
+
+
+def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int = 3,
+             target: Optional[str] = None, legacy_target: Optional[str] = None) -> dict:
     """Two-way sync of applications.md with the web app's jobkit_apps.
 
     Each machine (a laptop, a scheduled GitHub Action) merges against its own snapshot of what it last
@@ -267,13 +290,16 @@ def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int 
     Each attempt pulls, merges and pushes what changed; an update that matches no row means the web app
     edited it after the pull, so the attempt starts over instead of overwriting it. applications.md and
     the snapshot are written only once every push landed.
+
+    The snapshot also records which site it was synced with (`target`, a normalized URL). A snapshot of
+    another site is no base for this one: read as one, everything missing from a new, empty site would
+    look deleted there. So it is ignored, and the first sync to a new site pushes everything and deletes
+    nothing. A snapshot from before targets came from the Supabase client, so it counts as
+    `legacy_target`'s (the config's supabase_url). Without a target the snapshot is used as it is.
     """
     import jobkit_web
 
-    state: Dict[str, dict] = {}
-    if os.path.exists(state_path):
-        with open(state_path, encoding="utf-8") as handle:
-            state = json.load(handle)
+    state = _load_web_state(state_path, target, legacy_target)
     for _ in range(attempts):
         db_docs = client.pull_apps(user_id)
         hidden = getattr(client, "hidden_keys", {})
@@ -312,8 +338,10 @@ def sync_web(client, user_id: str, md_path: str, state_path: str, attempts: int 
     md_changed = new_text != text
     if md_changed:
         jobtrack.write_log_atomic(md_path, new_text)
-    jobtrack.write_log_atomic(state_path, json.dumps({key_str(k): r for k, r in merged.items()},
-                                                     indent=1, sort_keys=True))
+    snapshot = {key_str(k): r for k, r in merged.items()}
+    if target:
+        snapshot[TARGET_KEY] = jobkit_web.normalize_target(target)
+    jobtrack.write_log_atomic(state_path, json.dumps(snapshot, indent=1, sort_keys=True))
     return {"md_changed": md_changed, "pushed": pushed, "records": len(merged)}
 
 
@@ -368,7 +396,8 @@ def run_web_sync(md_path: Optional[str] = None, timeout: int = 20) -> dict:
     config = jobkit_config.load()
     client = jobkit_web.client_from_config(config, timeout=timeout)
     return sync_web(client, client.owner_id(), md_path or jobkit_paths.data_file("applications.md"),
-                    web_state_path(jobkit_config.sync_machine(config)))
+                    web_state_path(jobkit_config.sync_machine(config)),
+                    target=client.target, legacy_target=config.supabase_url or None)
 
 
 def auto_sync_web() -> bool:

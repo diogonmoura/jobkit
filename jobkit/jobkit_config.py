@@ -20,6 +20,7 @@ CONFIG_NAME = "jobkit.toml"
 CHANNELS = ("console", "telegram")
 BACKENDS = ("artifact", "web", "")
 SECRET_KEY_VAR = "SUPABASE_SECRET_KEY"
+ENGINE_TOKEN_VAR = "JOBKIT_ENGINE_TOKEN"
 
 
 class ConfigError(ValueError):
@@ -36,6 +37,8 @@ class Config:
     tracker_backend: str = ""
     supabase_url: str = ""
     supabase_env: str = "~/.jobkit/supabase.env"
+    web_url: str = ""
+    web_env: str = "~/.jobkit/web.env"
     sync_machine: str = ""
 
 
@@ -174,6 +177,8 @@ def load(path: Optional[str] = None) -> Config:
         artifact_url=str(tracker.get("artifact_url", "")),
         supabase_url=str(tracker.get("supabase_url", "")),
         supabase_env=str(tracker.get("supabase_env", Config.supabase_env)),
+        web_url=str(tracker.get("web_url", "")),
+        web_env=str(tracker.get("web_env", Config.web_env)),
         sync_machine=str(tracker.get("machine", "")),
     )
     # Repos set up before there was a choice only have artifact_url.
@@ -191,12 +196,12 @@ def load(path: Optional[str] = None) -> Config:
     return config
 
 
-def supabase_secret_key(config: Config) -> str:
-    """The web app's Supabase secret key: the environment first, then the env file. Never jobkit.toml."""
-    key = os.environ.get(SECRET_KEY_VAR, "").strip()
-    if key:
-        return key
-    path = os.path.expanduser(config.supabase_env)
+def _secret(var: str, env_file: str) -> str:
+    """A named secret: the environment first, then the env file (NAME=value, optional export and quotes)."""
+    value = os.environ.get(var, "").strip()
+    if value:
+        return value
+    path = os.path.expanduser(env_file)
     if not os.path.exists(path):
         return ""
     with open(path, encoding="utf-8") as handle:
@@ -204,10 +209,20 @@ def supabase_secret_key(config: Config) -> str:
             line = line.strip()
             if line.startswith("export "):
                 line = line[len("export "):].strip()
-            name, sep, value = line.partition("=")
-            if sep and name.strip() == SECRET_KEY_VAR:
-                return value.strip().strip("'\"")
+            name, sep, found = line.partition("=")
+            if sep and name.strip() == var:
+                return found.strip().strip("'\"")
     return ""
+
+
+def supabase_secret_key(config: Config) -> str:
+    """The web app's Supabase secret key: the environment first, then the env file. Never jobkit.toml."""
+    return _secret(SECRET_KEY_VAR, config.supabase_env)
+
+
+def engine_token(config: Config) -> str:
+    """The web app's engine token: the environment first, then the env file. Never jobkit.toml."""
+    return _secret(ENGINE_TOKEN_VAR, config.web_env)
 
 
 def sync_machine(config: Config) -> str:

@@ -44,17 +44,30 @@ wizard at `/setup` connects the database and an AI model (OpenRouter by
 default) and turns your preferences into the profile, rubric and filters, so
 no personal data lives in the code. See [`web/README.md`](web/README.md).
 
-To use it alongside this plugin, set `[tracker] backend = "web"` and
-`supabase_url` in `jobkit.toml` and put the Supabase secret key in
-`SUPABASE_SECRET_KEY` (or the env file named by `supabase_env`, default
-`~/.jobkit/supabase.env`; never in `jobkit.toml`). Then:
+To use it alongside this plugin, set `[tracker] backend = "web"` and point the
+engine at the web app in one of two ways (secrets never go in `jobkit.toml`):
+
+- Any setup (Cloudflare + Supabase or Cloudflare + Neon): set
+  `web_url = "https://<your jobkit site>"` and put the engine token in
+  `JOBKIT_ENGINE_TOKEN` (or the env file named by `web_env`, default
+  `~/.jobkit/web.env`). It is the same value as the Worker's
+  `JOBKIT_ENGINE_TOKEN` secret.
+- Supabase only (the older way): set `supabase_url` and put the Supabase secret
+  key in `SUPABASE_SECRET_KEY` (or the env file named by `supabase_env`, default
+  `~/.jobkit/supabase.env`).
+
+If both are set, `web_url` wins. Then:
 
 - `sync web` keeps `applications.md` and the web app's applications in
   two-way sync, with the same merge rules as the artifact tracker. `add`, `log`,
   `stale` and `stats` sync on their own; offline they warn once and carry on.
   Each machine keeps its own sync snapshot next to `applications.md`
   (`.jobkit-web-sync-<machine>.json`, named by `JOBKIT_MACHINE`,
-  `[tracker] machine`, or the hostname).
+  `[tracker] machine`, or the hostname). The snapshot records which site it
+  was synced with, so after switching setups (pointing `web_url` at a new
+  site) the engine notices and the first sync pushes everything in
+  `applications.md` to the new site and deletes nothing. There is no snapshot
+  file to delete by hand.
 - `watch push-postings` sends current postings from watched boards the web app
   can't read (SuccessFactors, Workday, SmartRecruiters and the rest) to it; its
   daily scan scores them like its own.
@@ -115,7 +128,9 @@ telegram_env = "~/.claude/channels/telegram/.env"
 [tracker]
 backend = ""            # "artifact", "web", or empty for none
 artifact_url = ""       # backend = "artifact": the claude.ai tracker page
-supabase_url = ""       # backend = "web": https://<ref>.supabase.co
+web_url = ""            # backend = "web", any setup: https://<your jobkit site>
+web_env = "~/.jobkit/web.env"   # file holding JOBKIT_ENGINE_TOKEN (env var wins)
+supabase_url = ""       # backend = "web", Supabase only: https://<ref>.supabase.co
 ```
 
 ## CV data

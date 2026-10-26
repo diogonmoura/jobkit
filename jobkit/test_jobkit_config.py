@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -140,3 +141,50 @@ class TestSyncMachine(unittest.TestCase):
 
     def test_read_from_toml(self):
         self.assertEqual(load_text('[tracker]\nbackend = "web"\nmachine = "laptop"\n').sync_machine, "laptop")
+
+
+class TestWebConfig(unittest.TestCase):
+    def test_defaults(self):
+        config = cfg.Config()
+        self.assertEqual((config.web_url, config.web_env), ("", "~/.jobkit/web.env"))
+
+    def test_loaded_from_tracker_table(self):
+        config = load_text('[tracker]\nbackend = "web"\nweb_url = "https://jobkit.example.app"\n'
+                           'web_env = "~/secrets/web.env"\n')
+        self.assertEqual((config.web_url, config.web_env), ("https://jobkit.example.app", "~/secrets/web.env"))
+
+    def test_load_defaults_when_unset(self):
+        config = load_text('[tracker]\nbackend = "web"\n')
+        self.assertEqual((config.web_url, config.web_env), ("", "~/.jobkit/web.env"))
+
+
+class TestEngineToken(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        self.env_path = os.path.join(folder, "web.env")
+        self.config = cfg.Config(web_env=self.env_path)
+
+    def write(self, text):
+        with open(self.env_path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+
+    def test_env_var_wins_over_file(self):
+        self.write("JOBKIT_ENGINE_TOKEN=from-file\n")
+        with mock.patch.dict(os.environ, {"JOBKIT_ENGINE_TOKEN": "from-env"}):
+            self.assertEqual(cfg.engine_token(self.config), "from-env")
+
+    def test_read_from_env_file_with_export_and_quotes(self):
+        self.write("# comment\nexport JOBKIT_ENGINE_TOKEN=\"tok\"\n")
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(cfg.engine_token(self.config), "tok")
+
+    def test_missing_is_empty_string(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(cfg.engine_token(self.config), "")
+
+    def test_token_in_toml_is_ignored(self):
+        config = load_text('[tracker]\nweb_token = "x"\n')
+        config.web_env = self.env_path
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(cfg.engine_token(config), "")

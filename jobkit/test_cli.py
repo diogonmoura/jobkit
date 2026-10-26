@@ -123,9 +123,12 @@ class TestWebAutoSync(unittest.TestCase):
         self.calls, self.error = [], None
         owner = mock.Mock()
         owner.owner_id.return_value = "u-1"
+        owner.target = "https://ref.supabase.co"
+        self.targets = []
 
-        def fake_sync(client, user_id, md_path, machine, attempts=3):
+        def fake_sync(client, user_id, md_path, machine, attempts=3, target=None, legacy_target=None):
             self.calls.append((user_id, os.path.basename(md_path)))
+            self.targets.append((target, legacy_target))
             if self.error:
                 raise self.error
             return {"md_changed": False, "pushed": 0, "records": 1}
@@ -147,6 +150,8 @@ class TestWebAutoSync(unittest.TestCase):
         code, _, _ = self.add()
         self.assertEqual(code, 0)
         self.assertEqual(self.calls, [("u-1", "applications.md")] * 2)
+        # The snapshot is checked against the client's site; a snapshot without one counts as supabase_url's.
+        self.assertEqual(self.targets[0], ("https://ref.supabase.co", "https://ref.supabase.co"))
 
     def test_stats_syncs_only_before(self):
         run(["stats"], self.home)

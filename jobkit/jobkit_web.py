@@ -1,7 +1,10 @@
-"""The web app's Supabase, as the engine sees it: applications and postings for its scan.
+"""The web app as the engine sees it: applications and postings for its scan. Stdlib only.
 
-Talks to Supabase's REST API (PostgREST) with the secret key from jobkit_config.supabase_secret_key, which
-bypasses Row Level Security, so every query names the owner's user id itself. Stdlib only.
+Two clients with the same methods. EngineClient talks to the web app's /api/engine endpoints with the engine
+token from jobkit_config.engine_token; it works for any setup, and the token fixes the owner server-side.
+Client talks to Supabase's REST API (PostgREST) directly with the secret key from
+jobkit_config.supabase_secret_key, which bypasses Row Level Security, so every query names the owner's user
+id itself. client_from_config picks one; web_url wins over supabase_url.
 
 Application updates are conditional on the row's updated_at as last read (a trigger moves it on every
 change), so an edit made in the web app between a pull and a push is never overwritten: the update matches
@@ -28,11 +31,23 @@ WEB_ONLY_COLUMNS = ("cv_md", "posting_text", "answers", "job_id")
 
 
 class WebError(Exception):
-    """Any failure talking to the web app's Supabase. The message is a short reason for a warning."""
+    """Any failure talking to the web app, through either client. The message is a short reason for a
+    warning; status is the HTTP status when there was one."""
 
     def __init__(self, message: str, status: Optional[int] = None):
         super().__init__(message)
         self.status = status
+
+
+USER_AGENT = "jobkit-engine/1"
+# Plain http only for a site running on this machine.
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def normalize_target(url: str) -> str:
+    """A site's URL as the sync snapshot records it: scheme, lowercase host and path, no trailing slash."""
+    parts = urllib.parse.urlsplit(str(url).strip())
+    return "{}://{}{}".format(parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"))
 
 
 def _quote(value: str) -> str:
@@ -66,25 +81,58 @@ def _record(row: dict) -> Optional[dict]:
     }
 
 
-class Client:
-    def __init__(self, url: str, key: str, opener=urllib.request.urlopen, timeout: int = 20):
-        self.base = url.rstrip("/") + "/rest/v1"
-        self.key = key
+def _map_apps(rows: List[dict]) -> Tuple[DbDocs, set, Dict[Key, Tuple[str, Optional[str]]]]:
+    """Raw jobkit_apps rows as merge records, plus which rows hold web-only data (web_only_keys: never
+    deleted by inference) and which are shortlisted jobs (hidden_keys, mapped to their row id and
+    updated_at so an application logged elsewhere can be put on that row)."""
+    docs: DbDocs = {}
+    web_only_keys, hidden_keys = set(), {}
+    for row in rows:
+        key = (row.get("company") or "", row.get("role") or "")
+        if row.get("status") in WEB_ONLY_STATUSES:
+            hidden_keys[key] = (str(row["id"]), row.get("updated_at"))
+            continue
+        if any(row.get(column) for column in WEB_ONLY_COLUMNS):
+            web_only_keys.add(key)
+        record = _record(row)
+        if record is None:
+            continue
+        docs[(record["company"], record["role"])] = (str(row["id"]), record, row.get("updated_at"))
+    return docs, web_only_keys, hidden_keys
+
+
+def _error_detail(error: urllib.error.HTTPError) -> str:
+    """The server's own reason from an error body, short: the Worker's `error` or PostgREST's `message`."""
+    try:
+        answer = json.loads(error.read().decode("utf-8"))
+    except Exception:  # no body, not JSON, or a body that can't be read: the status alone will do
+        return ""
+    if not isinstance(answer, dict):
+        return ""
+    detail = answer.get("error") or answer.get("message") or ""
+    detail = " ".join(str(detail).split())
+    return detail if len(detail) <= 200 else detail[:197] + "..."
+
+
+class _Http:
+    """One JSON request to the web app, with every failure turned into a short WebError."""
+
+    def __init__(self, opener=urllib.request.urlopen, timeout: int = 20):
         self.opener = opener
         self.timeout = timeout
 
-    def _call(self, method: str, path: str, body=None, prefer: str = ""):
-        headers = {"apikey": self.key, "Authorization": "Bearer " + self.key,
-                   "Content-Type": "application/json", "Accept": "application/json"}
-        if prefer:
-            headers["Prefer"] = prefer
+    def _http_error(self, status: int, detail: str) -> str:
+        return "HTTP {}: {}".format(status, detail) if detail else "HTTP {}".format(status)
+
+    def _send(self, method: str, url: str, headers: dict, body=None):
         data = json.dumps(body).encode("utf-8") if body is not None else None
-        request = urllib.request.Request(self.base + path, data=data, headers=headers, method=method)
+        headers = dict(headers, **{"User-Agent": USER_AGENT})
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with self.opener(request, timeout=self.timeout) as response:
                 raw = response.read()
         except urllib.error.HTTPError as error:
-            raise WebError("HTTP {}".format(error.code), status=error.code) from None
+            raise WebError(self._http_error(error.code, _error_detail(error)), status=error.code) from None
         except urllib.error.URLError as error:
             raise WebError(str(error.reason)) from None
         except (socket.timeout, TimeoutError):
@@ -98,6 +146,21 @@ class Client:
         except ValueError:
             raise WebError("unreadable response") from None
 
+
+class Client(_Http):
+    def __init__(self, url: str, key: str, opener=urllib.request.urlopen, timeout: int = 20):
+        super().__init__(opener, timeout)
+        self.base = url.rstrip("/") + "/rest/v1"
+        self.target = normalize_target(url)
+        self.key = key
+
+    def _call(self, method: str, path: str, body=None, prefer: str = ""):
+        headers = {"apikey": self.key, "Authorization": "Bearer " + self.key,
+                   "Content-Type": "application/json", "Accept": "application/json"}
+        if prefer:
+            headers["Prefer"] = prefer
+        return self._send(method, self.base + path, headers, body)
+
     def owner_id(self) -> str:
         rows = self._call("GET", "/jobkit_instance?select=owner_user_id&limit=1") or []
         owner = rows[0].get("owner_user_id") if rows else None
@@ -106,23 +169,9 @@ class Client:
         return str(owner)
 
     def pull_apps(self, user_id: str) -> DbDocs:
-        """Applications as merge records. Also notes, for the sync, which rows hold web-only data
-        (web_only_keys: never deleted by inference) and which are shortlisted jobs (hidden_keys, mapped to
-        their row id and updated_at so an application logged elsewhere can be put on that row)."""
+        """Applications as merge records, also setting web_only_keys and hidden_keys for the sync."""
         rows = self._call("GET", "/jobkit_apps?select=*&user_id=eq." + _quote(user_id)) or []
-        docs: DbDocs = {}
-        self.web_only_keys, self.hidden_keys = set(), {}
-        for row in rows:
-            key = (row.get("company") or "", row.get("role") or "")
-            if row.get("status") in WEB_ONLY_STATUSES:
-                self.hidden_keys[key] = (str(row["id"]), row.get("updated_at"))
-                continue
-            if any(row.get(column) for column in WEB_ONLY_COLUMNS):
-                self.web_only_keys.add(key)
-            record = _record(row)
-            if record is None:
-                continue
-            docs[(record["company"], record["role"])] = (str(row["id"]), record, row.get("updated_at"))
+        docs, self.web_only_keys, self.hidden_keys = _map_apps(rows)
         return docs
 
     def insert_app(self, user_id: str, app_id: str, record: dict) -> None:
@@ -146,10 +195,76 @@ class Client:
                    prefer="resolution=merge-duplicates,return=minimal")
 
 
-def client_from_config(config: jobkit_config.Config, timeout: int = 20) -> Client:
+class EngineClient(_Http):
+    """The same operations through the web app's /api/engine endpoints, for Supabase and Neon setups alike.
+    The token fixes the owner server-side, so user_id arguments are accepted and ignored."""
+
+    def __init__(self, url: str, token: str, opener=urllib.request.urlopen, timeout: int = 20):
+        super().__init__(opener, timeout)
+        self.base = url.rstrip("/") + "/api/engine"
+        self.target = normalize_target(url)
+        self.token = token
+
+    def _http_error(self, status: int, detail: str) -> str:
+        if status == 401:
+            return "engine token rejected (check JOBKIT_ENGINE_TOKEN and the Worker's secret)"
+        return super()._http_error(status, detail)
+
+    def _call(self, method: str, path: str, body=None):
+        headers = {"Authorization": "Bearer " + self.token,
+                   "Content-Type": "application/json", "Accept": "application/json"}
+        return self._send(method, self.base + path, headers, body)
+
+    def _app_path(self, app_id: str, updated_at: Optional[str]) -> str:
+        return "/apps/{}?updated_at={}".format(_quote(app_id), _quote(updated_at or ""))
+
+    def owner_id(self) -> str:
+        try:
+            answer = self._call("GET", "/owner") or {}
+        except WebError as error:
+            if error.status == 404:
+                raise WebError("no owner yet; finish /setup in the web app first", status=404) from None
+            raise
+        owner = answer.get("ownerId")
+        if not owner:
+            raise WebError("no owner yet; finish /setup in the web app first")
+        return str(owner)
+
+    def pull_apps(self, user_id: str) -> DbDocs:
+        """Applications as merge records, also setting web_only_keys and hidden_keys for the sync."""
+        rows = (self._call("GET", "/apps") or {}).get("rows") or []
+        docs, self.web_only_keys, self.hidden_keys = _map_apps(rows)
+        return docs
+
+    def insert_app(self, user_id: str, app_id: str, record: dict) -> None:
+        self._call("POST", "/apps", dict({"id": app_id}, **record))
+
+    def delete_app_if_unchanged(self, user_id: str, app_id: str, updated_at: Optional[str]) -> bool:
+        return bool((self._call("DELETE", self._app_path(app_id, updated_at)) or {}).get("deleted"))
+
+    def update_app_if_unchanged(self, user_id: str, app_id: str, updated_at: Optional[str], record: dict) -> bool:
+        return bool((self._call("PATCH", self._app_path(app_id, updated_at), record) or {}).get("updated"))
+
+    def upsert_openings(self, user_id: str, rows: List[dict]) -> None:
+        if not rows:
+            return
+        self._call("POST", "/openings", {"rows": rows})
+
+
+def client_from_config(config: jobkit_config.Config, timeout: int = 20):
+    """The engine client when the web app's URL is set (it wins), else the Supabase client."""
+    if config.web_url:
+        parts = urllib.parse.urlsplit(config.web_url.strip())
+        local = parts.scheme.lower() == "http" and (parts.hostname or "") in LOCAL_HOSTS
+        if parts.scheme.lower() != "https" and not local:
+            raise WebError("web_url must start with https://")
+        token = jobkit_config.engine_token(config)
+        if not token:
+            raise WebError("no engine token (set JOBKIT_ENGINE_TOKEN)")
+        return EngineClient(config.web_url, token, timeout=timeout)
+    if not config.supabase_url:
+        raise WebError("no web_url or supabase_url in jobkit.toml")
     key = jobkit_config.supabase_secret_key(config)
     if not key:
-        raise WebError("no secret key")
-    if not config.supabase_url:
-        raise WebError("no supabase_url in jobkit.toml")
+        raise WebError("no secret key (set SUPABASE_SECRET_KEY)")
     return Client(config.supabase_url, key, timeout=timeout)
