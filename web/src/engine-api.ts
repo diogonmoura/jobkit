@@ -7,12 +7,12 @@ import type { Env } from "./types";
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** The body's fields, or a message naming the first one that is not a column of the table. user_id is dropped: the owner is forced. */
-function allowedFields(table: string, body: Record<string, unknown>): Record<string, unknown> | string {
+function allowedFields(table: string, body: Record<string, unknown>, exclude: string[] = []): Record<string, unknown> | string {
   const columns = TABLES[table].columns;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(body)) {
     if (key === "user_id") continue;
-    if (!columns.includes(key)) return `Unknown field: ${key}`;
+    if (!columns.includes(key) || exclude.includes(key)) return `Unknown field: ${key}`;
     out[key] = value;
   }
   return out;
@@ -80,7 +80,7 @@ export async function handleEngineApi(request: Request, env: Env, path: string, 
     if (method === "PATCH") {
       const body = await readObject(request);
       if (!body) return bad("Body must be a JSON object");
-      const fields = allowedFields("jobkit_apps", body);
+      const fields = allowedFields("jobkit_apps", body, ["id", "updated_at"]);
       if (typeof fields === "string") return bad(fields);
       patch = fields;
     }

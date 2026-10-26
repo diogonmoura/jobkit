@@ -44,7 +44,7 @@
       let mode = resetToken ? "reset" : "signin";
       const badLink = params.has("error");
       // Keep the token and error out of the address bar and history from here on.
-      if (params.has("token") || badLink) { params.delete("token"); params.delete("error"); history.replaceState(null, "", "/login" + (params.size ? "?" + params : "")); }
+      if (params.has("token") || badLink) { params.delete("token"); params.delete("error"); history.replaceState(null, "", "/login" + ([...params].length ? "?" + params : "")); }
       const post = async (path, body) => {
         const res = await fetch("/api/auth" + path, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) });
         const data = await res.json().catch(() => ({}));

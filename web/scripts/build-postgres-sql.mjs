@@ -2,8 +2,9 @@
 // The baseline comes first with id 0000_schema.sql; migrations follow in file-name order.
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dir = path.join(root, "postgres", "migrations");
 const read = (p) => fs.readFileSync(p, "utf8").trim() + "\n";
 

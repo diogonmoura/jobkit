@@ -45,7 +45,7 @@ describe("proxyNeonAuth", () => {
   });
 
   it("forwards each endpoint jobkit uses", async () => {
-    for (const path of ["/sign-up/email", "/sign-in/email", "/sign-out", "/get-session", "/token", "/request-password-reset", "/reset-password"]) {
+    for (const path of ["/sign-up/email", "/sign-in/email", "/sign-out", "/request-password-reset", "/reset-password"]) {
       const { seen, fetchImpl } = upstream(() => Response.json({}));
       await proxyNeonAuth(new Request(`https://jobs.example.test/api/auth${path}`, { method: "POST" }), env, path, fetchImpl);
       assert.equal(seen.request?.url, `${BASE}${path}`);
@@ -53,7 +53,7 @@ describe("proxyNeonAuth", () => {
   });
 
   it("answers 404 for any other endpoint without contacting Neon", async () => {
-    for (const path of ["/admin/list-users", "", "/", "/sign-in/email/", "/sign-in", "/token/x", "/get-session/../admin/list-users"]) {
+    for (const path of ["/admin/list-users", "", "/", "/sign-in/email/", "/sign-in", "/token", "/get-session", "/token/x", "/get-session/../admin/list-users"]) {
       const { seen, fetchImpl } = upstream(() => new Response("unreachable"));
       const res = await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/admin/list-users"), env, path, fetchImpl);
       assert.equal(res.status, 404, path);
@@ -90,21 +90,21 @@ describe("proxyNeonAuth", () => {
 
   it("sends no body on GET", async () => {
     const { seen, fetchImpl } = upstream(() => Response.json(null));
-    await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/get-session"), env, "/get-session", fetchImpl);
+    await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/request-password-reset"), env, "/request-password-reset", fetchImpl);
     assert.equal(seen.request?.method, "GET");
     assert.equal(seen.init?.body, undefined);
   });
 
   it("answers 503 when Neon Auth is not configured", async () => {
     const { seen, fetchImpl } = upstream(() => new Response("unreachable"));
-    const res = await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/get-session"), {} as Env, "/get-session", fetchImpl);
+    const res = await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/get-session"), {} as Env, "/sign-in/email", fetchImpl);
     assert.equal(res.status, 503);
     assert.equal(seen.request, undefined);
   });
 
   it("answers 502 when Neon Auth is unreachable", async () => {
     const boom = (async () => { throw new Error("down"); }) as typeof fetch;
-    const res = await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/get-session"), env, "/get-session", boom);
+    const res = await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/get-session"), env, "/sign-in/email", boom);
     assert.equal(res.status, 502);
   });
 });

@@ -34,12 +34,12 @@ test("/api/auth/* goes to Neon Auth on Postgres", async () => {
     return Response.json({ session: null });
   }) as typeof fetch;
   try {
-    const res = await worker.fetch(new Request("https://jobs.example.test/api/auth/get-session?x=1"), pg);
+    const res = await worker.fetch(new Request("https://jobs.example.test/api/auth/sign-out?x=1"), pg);
     assert.equal(res.status, 200);
   } finally {
     globalThis.fetch = real;
   }
-  assert.deepEqual(seen, ["https://ep-x.neonauth.example.test/neondb/auth/get-session?x=1"]);
+  assert.deepEqual(seen, ["https://ep-x.neonauth.example.test/neondb/auth/sign-out?x=1"]);
 });
 
 test("the Postgres wizard's remote client is served without a session", async () => {

@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, types as pgTypes } from "@neondatabase/serverless";
 import { compile, DbCompileError } from "./compile";
 import { POSTGRES_MIGRATIONS } from "./postgres-sql.generated";
 import { TABLES } from "./tables";
@@ -21,7 +21,8 @@ export type SqlRunner = (text: string, values: unknown[]) => Promise<Record<stri
 export function neonRunner(databaseUrl: string): SqlRunner {
   const sql = neon(databaseUrl);
   // The type parsers must go on each query: neon() ignores `types` in its own options.
-  const types = { getTypeParser: (oid: number) => TYPE_PARSERS[oid] ?? ((v: string) => v) };
+  // Per-query `types` replaces pg-types entirely, so fall back to its defaults (bool, int4, jsonb...).
+  const types = { getTypeParser: (oid: number, fmt?: "text" | "binary") => TYPE_PARSERS[oid] ?? pgTypes.getTypeParser(oid, fmt) };
   return async (text, values) => (await sql.query(text, values, { types })) as Record<string, unknown>[];
 }
 

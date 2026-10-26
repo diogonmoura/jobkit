@@ -179,14 +179,17 @@ describe("neonRunner", () => {
           fields: [
             { name: "ts", dataTypeID: 1184 },
             { name: "n", dataTypeID: 20 },
+            { name: "b", dataTypeID: 16 },
+            { name: "i", dataTypeID: 23 },
+            { name: "j", dataTypeID: 3802 },
           ],
-          rows: [["2026-02-01 00:00:00.123456+00", "5"]],
+          rows: [["2026-02-01 00:00:00.123456+00", "5", "f", "5", '{"a":1}']],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     try {
       const rows = await neonRunner("postgres://u:p@example.neon.tech/db")("select 1", []);
-      assert.deepEqual(rows, [{ ts: "2026-02-01 00:00:00.123456+00", n: 5 }]);
+      assert.deepEqual(rows, [{ ts: "2026-02-01 00:00:00.123456+00", n: 5, b: false, i: 5, j: { a: 1 } }]);
     } finally {
       neonConfig.fetchFunction = original;
     }

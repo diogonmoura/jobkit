@@ -75,6 +75,17 @@ describe("handleEngineApi", () => {
     assert.deepEqual(await run("select user_id from jobkit_external_openings", []), [{ user_id: U1 }]);
   });
 
+  it("rejects id and updated_at in a PATCH body", async () => {
+    await call("POST", "/engine/apps", app);
+    const before = (await listed())[0].updated_at as string;
+    const url = `/engine/apps/a1?updated_at=${encodeURIComponent(before)}`;
+    assert.equal((await call("PATCH", url, { id: "a2" })).status, 400);
+    assert.equal((await call("PATCH", url, { updated_at: "2000-01-01 00:00:00+00" })).status, 400);
+    const rows = await listed();
+    assert.deepEqual(rows.map((r) => r.id), ["a1"]);
+    assert.equal(rows[0].updated_at, before);
+  });
+
   it("updates only while updated_at still matches", async () => {
     await call("POST", "/engine/apps", app);
     const before = (await listed())[0].updated_at as string;

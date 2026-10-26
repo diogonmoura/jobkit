@@ -5,8 +5,6 @@ const ALLOWED_PATHS = new Set([
   "/sign-up/email",
   "/sign-in/email",
   "/sign-out",
-  "/get-session",
-  "/token",
   "/request-password-reset",
   "/reset-password",
 ]);
