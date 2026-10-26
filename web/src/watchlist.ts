@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Db } from "./db/types";
 import type { Env } from "./types";
 import { completeChat } from "./llm";
 import { parseBoardUrl, probe } from "./setup";
@@ -94,7 +94,7 @@ export async function resolveBoardUrl(env: Env, userId: string, request: Request
   return { ...parsed, company, jobs, hq, industry, costUsd, ...(suggestError ? { suggestError } : {}) };
 }
 
-export async function addBoard(supabase: SupabaseClient, userId: string, b: { vendor: string; slug: string; company: string; hq?: string; industry?: string }) {
+export async function addBoard(supabase: Db, userId: string, b: { vendor: string; slug: string; company: string; hq?: string; industry?: string }) {
   if (!(VENDORS as readonly string[]).includes(b.vendor) || !b.slug || !b.company?.trim()) throw new Error("Invalid board");
   const row = { user_id: userId, id: `${b.vendor}-${b.slug}`, company: b.company.trim().slice(0, 80), vendor: b.vendor, slug: b.slug, enabled: true, hq: String(b.hq ?? "").trim().slice(0, 60), industry: String(b.industry ?? "").trim().slice(0, 40) };
   const { error } = await supabase.from("jobkit_scan_targets").upsert(row, { onConflict: "user_id,id" });

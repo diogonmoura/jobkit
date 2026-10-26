@@ -1,5 +1,5 @@
 import { langName } from "./i18n";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Db } from "./db/types";
 import type { Env } from "./types";
 import { completeChat, type ChatMessage } from "./llm";
 import { loadExperience } from "./experience";
@@ -15,7 +15,7 @@ const SPLIT = "<!--ANALYSIS-->";
  */
 export async function generateJobCv(
   env: Env,
-  supabase: SupabaseClient,
+  supabase: Db,
   userId: string,
   request: Request,
   opts: { jobId: string; force?: boolean; instructions?: string; postingText?: string },

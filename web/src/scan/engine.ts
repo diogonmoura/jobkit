@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Db } from "../db/types";
 import type { RawOpening } from "../types";
 
 /**
@@ -34,7 +34,7 @@ export function engineOpening(row: ExternalRow): RawOpening {
   };
 }
 
-export async function loadEngineOpenings(supabase: SupabaseClient, userId: string): Promise<RawOpening[]> {
+export async function loadEngineOpenings(supabase: Db, userId: string): Promise<RawOpening[]> {
   const { data, error } = await supabase
     .from(TABLE)
     .select("external_key, company, title, url, description, location, source")
@@ -44,7 +44,7 @@ export async function loadEngineOpenings(supabase: SupabaseClient, userId: strin
   return (data ?? []).map((row) => engineOpening(row as ExternalRow));
 }
 
-export async function clearEngineOpenings(supabase: SupabaseClient, userId: string, openings: RawOpening[]): Promise<void> {
+export async function clearEngineOpenings(supabase: Db, userId: string, openings: RawOpening[]): Promise<void> {
   if (!openings.length) return;
   await supabase
     .from(TABLE)

@@ -95,7 +95,7 @@ class Query implements DbQuery {
     };
   }
 
-  private async exec(): Promise<DbResult> {
+  private async exec(): Promise<DbResult<any>> {
     const plan = this.plan;
     try {
       const { text, values } = compile(this.scoped(), TABLES);

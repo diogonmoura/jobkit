@@ -1,5 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createServiceSupabase, createSupabaseFromRequest, getOwnerId, jsonResponse, supabaseConfigured } from "./auth";
+import type { Db } from "./db/types";
+import { createSupabaseFromRequest, getOwnerId, jsonResponse } from "./auth";
+import { dbConfigured, serviceDb } from "./db";
 import { encryptSecret, loadLlmSettings, PROVIDERS, testLlmKey, type LlmProvider } from "./llm";
 import { loadProfile, normalizeProfile, saveProfile } from "./preferences";
 import type { Env, PreferenceProfile } from "./types";
@@ -106,7 +107,7 @@ function encKeyOk(env: Env): boolean {
 }
 
 async function currentUser(request: Request, env: Env) {
-  if (!supabaseConfigured(env)) return { user: null, supabase: null, pending: [] as never[] };
+  if (!dbConfigured(env)) return { user: null, supabase: null, pending: [] as never[] };
   const { supabase, pending } = createSupabaseFromRequest(request, env);
   const { data } = await supabase.auth.getUser();
   return { user: data.user, supabase, pending };
@@ -317,7 +318,7 @@ export function profileFromAnswers(a: WizardAnswers, current: PreferenceProfile)
 /** Handles /api/setup/*. Returns null for other paths. */
 export async function handleSetup(request: Request, env: Env, path: string): Promise<Response | null> {
   if (!path.startsWith("/setup/")) return null;
-  const configured = supabaseConfigured(env);
+  const configured = dbConfigured(env);
 
   if (path === "/setup/status" && request.method === "GET") {
     const supa = configured
@@ -331,7 +332,7 @@ export async function handleSetup(request: Request, env: Env, path: string): Pro
     if (isOwner && user) {
       const s = await loadLlmSettings(env, user.id);
       llm = s ? { configured: true, provider: s.provider, model: s.model, baseUrl: s.provider === "custom" ? s.baseUrl : "" } : { configured: false };
-      const prof = await loadProfile(createServiceSupabase(env), user.id);
+      const prof = await loadProfile(serviceDb(env), user.id);
       onboarded = Boolean(prof.onboarded_at);
     }
     let projectRef = "";
@@ -376,13 +377,13 @@ export async function handleSetup(request: Request, env: Env, path: string): Pro
       const b = (await request.clone().json().catch(() => ({}))) as { token?: string };
       if (String(b.token ?? "") !== env.SETUP_TOKEN) return jsonResponse({ error: "Wrong setup token" }, { status: 403 }, pending);
     }
-    const { error } = await createServiceSupabase(env).from("jobkit_instance").insert({ id: 1, owner_user_id: user.id });
+    const { error } = await serviceDb(env).from("jobkit_instance").insert({ id: 1, owner_user_id: user.id });
     if (error) return jsonResponse({ error: error.message }, { status: 409 }, pending);
     return jsonResponse({ ok: true }, {}, pending);
   }
 
   if (!owner || owner !== user.id) return jsonResponse({ error: "Only the owner can change setup" }, { status: 403 }, pending);
-  const admin: SupabaseClient = createServiceSupabase(env);
+  const admin = serviceDb(env);
 
   if (path === "/setup/llm" && request.method === "POST") {
     if (!encKeyOk(env)) return jsonResponse({ error: "Set SETTINGS_ENC_KEY on the Worker first (see step 1)" }, { status: 412 }, pending);

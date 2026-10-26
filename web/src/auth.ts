@@ -1,5 +1,6 @@
 import { createServerClient, parseCookieHeader } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { dbConfigured, serviceDb } from "./db";
 import type { Env } from "./types";
 
 type CookiePending = {
@@ -88,8 +89,8 @@ export function supabaseConfigured(env: Env): boolean {
  */
 export async function getOwnerId(env: Env): Promise<string | null> {
   if (env.JOBKIT_OWNER_USER_ID) return env.JOBKIT_OWNER_USER_ID;
-  if (!supabaseConfigured(env)) return null;
-  const { data, error } = await createServiceSupabase(env).from("jobkit_instance").select("owner_user_id").eq("id", 1).maybeSingle();
+  if (!dbConfigured(env)) return null;
+  const { data, error } = await serviceDb(env).from("jobkit_instance").select("owner_user_id").eq("id", 1).maybeSingle();
   if (error) return null;
   return data?.owner_user_id ? String(data.owner_user_id) : null;
 }

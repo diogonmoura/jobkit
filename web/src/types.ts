@@ -3,6 +3,14 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
+  /** "supabase" (default) or "postgres" (Neon). Unset keeps the Supabase install working as is. */
+  JOBKIT_DB?: string;
+  /** Postgres mode: Neon connection string. Secret. */
+  DATABASE_URL?: string;
+  /** Postgres mode: base URL of the Neon Auth project. */
+  NEON_AUTH_BASE_URL?: string;
+  /** Postgres mode: bearer token the jobkit engine uses to reach the API. Secret. */
+  JOBKIT_ENGINE_TOKEN?: string;
   /** Optional: share auth cookies across subdomains (e.g. ".example.com"). Leave unset for a single host. */
   COOKIE_DOMAIN?: string;
   /** Public origin, used as the HTTP-Referer for OpenRouter. */

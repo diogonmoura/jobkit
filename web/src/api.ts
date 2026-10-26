@@ -1,4 +1,5 @@
-import { createServiceSupabase, getOwnerId, jsonResponse, requireUser } from "./auth";
+import { getOwnerId, jsonResponse, requireUser } from "./auth";
+import { asDb, serviceDb, serviceDbOr } from "./db";
 import { handleSetup } from "./setup";
 import { completeChat } from "./llm";
 import type { Env, PreferenceProfile } from "./types";
@@ -44,7 +45,7 @@ export async function handleApi(
     if (!ownerId) {
       return jsonResponse({ error: "Cron not configured: finish /setup first" }, { status: 503 });
     }
-    const admin = createServiceSupabase(env);
+    const admin = serviceDb(env);
     const result = await runJobScan(env, admin, ownerId, "cron", null);
     return jsonResponse({ ok: true, ...result });
   }
@@ -56,7 +57,8 @@ export async function handleApi(
   if (!auth) {
     return jsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
-  const { userId, supabase, pending } = auth;
+  const { userId, pending } = auth;
+  const supabase = asDb(auth.supabase);
 
   try {
     if (path === "/ai/chat" && request.method === "POST") {
@@ -267,7 +269,7 @@ export async function handleApi(
         }
         return jsonResponse({ salary }, {}, pending);
       }
-      const admin = env.SUPABASE_SERVICE_ROLE_KEY ? createServiceSupabase(env) : supabase;
+      const admin = serviceDbOr(env, supabase);
       const profile = await loadProfile(supabase, userId);
       const seniority = String(body.seniority ?? profile.seniority[0] ?? "mid");
       const { estimate, costUsd } = await estimateSalary(

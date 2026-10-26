@@ -1,4 +1,5 @@
-import { applyCookies, createServiceSupabase, createSupabaseFromRequest, getOwnerId, supabaseConfigured } from "./auth";
+import { applyCookies, createSupabaseFromRequest, getOwnerId } from "./auth";
+import { dbConfigured, serviceDb } from "./db";
 import { handleApi } from "./api";
 import { loadProfile } from "./preferences";
 import { runJobScan } from "./scan/pipeline";
@@ -76,12 +77,12 @@ async function servePage(request: Request, env: Env, file: string): Promise<Resp
 
 export default {
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    if (!supabaseConfigured(env)) return;
+    if (!dbConfigured(env)) return;
     ctx.waitUntil(
       (async () => {
         const owner = await getOwnerId(env);
         if (!owner) return;
-        await runJobScan(env, createServiceSupabase(env), owner, "cron", null);
+        await runJobScan(env, serviceDb(env), owner, "cron", null);
       })().catch(() => {}),
     );
   },
@@ -102,14 +103,14 @@ export default {
     }
     if (url.pathname === "/setup" || url.pathname === "/setup.html") return servePage(request, env, "/setup");
     if (url.pathname === "/login" || url.pathname === "/login.html") {
-      if (!supabaseConfigured(env)) return redirect("/setup", request);
+      if (!dbConfigured(env)) return redirect("/setup", request);
       // Sign-in happens in the other app; "/" sends signed-out visitors there.
       if (externalAuth(env)) return redirect("/", request);
       return servePage(request, env, "/login");
     }
     if (PUBLIC_PATHS.has(url.pathname) || url.pathname.startsWith("/vendor/")) return env.ASSETS.fetch(request);
 
-    if (!supabaseConfigured(env)) return redirect("/setup", request);
+    if (!dbConfigured(env)) return redirect("/setup", request);
 
     const owner = await getOwnerId(env);
     if (!owner) return redirect("/setup", request);
@@ -123,7 +124,7 @@ export default {
     }
 
     if (url.pathname === "/" || url.pathname === "/index.html") {
-      const profile = await loadProfile(createServiceSupabase(env), user.id).catch(() => null);
+      const profile = await loadProfile(serviceDb(env), user.id).catch(() => null);
       // Only a fresh profile goes to the wizard; an instance set up before the wizard existed keeps working.
       if (profile && !profile.onboarded_at && !profile.roles.length) return applyCookies(redirect("/setup", request), pending);
       return applyCookies(await servePage(request, env, "/"), pending);
