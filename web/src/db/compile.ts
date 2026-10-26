@@ -1,6 +1,11 @@
 import type { QueryPlan, TableSpec } from "./types";
 
-export class DbCompileError extends Error {}
+export class DbCompileError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DbCompileError";
+  }
+}
 
 type Compiled = { text: string; values: unknown[] };
 
@@ -47,7 +52,7 @@ export function compile(plan: QueryPlan, tables: Record<string, TableSpec>): Com
         ).join(", ");
       }
       if (plan.limit !== undefined) {
-        if (!Number.isInteger(plan.limit) || plan.limit < 0) throw new DbCompileError("limit must be a non-negative integer");
+        if (!Number.isSafeInteger(plan.limit) || plan.limit < 0) throw new DbCompileError("limit must be a non-negative integer");
         text += ` limit ${plan.limit}`;
       }
     }
@@ -65,8 +70,8 @@ export function compile(plan: QueryPlan, tables: Record<string, TableSpec>): Com
     );
     let text = `insert into ${table} (${cols.join(", ")}) values ${tuples.join(", ")}`;
     if (plan.op === "upsert") {
-      if (!plan.onConflict) throw new DbCompileError("upsert needs onConflict");
-      const conflict = plan.onConflict.split(",").map((c) => c.trim());
+      const conflict = plan.onConflict ? plan.onConflict.split(",").map((c) => c.trim()) : spec.primaryKey;
+      if (!conflict.length) throw new DbCompileError(`upsert on ${plan.table} needs onConflict (no primary key)`);
       const target = conflict.map(col).join(", ");
       const sets = keys.filter((k) => !conflict.includes(k)).map((k) => `${quote(k)} = excluded.${quote(k)}`);
       text += ` on conflict (${target}) ` + (sets.length ? `do update set ${sets.join(", ")}` : "do nothing");

@@ -37,4 +37,5 @@ export type QueryPlan = {
 };
 
 // The allowlist for one table: only these columns may appear in SQL.
-export type TableSpec = { columns: string[]; jsonColumns: string[]; owned: boolean };
+// primaryKey is the conflict target for an upsert without onConflict.
+export type TableSpec = { columns: string[]; jsonColumns: string[]; owned: boolean; primaryKey: string[] };

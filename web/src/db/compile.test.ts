@@ -4,8 +4,8 @@ import { compile, DbCompileError } from "./compile";
 import type { QueryPlan, TableSpec } from "./types";
 
 const tables: Record<string, TableSpec> = {
-  jobkit_apps: { columns: ["user_id", "id", "company", "status", "payload", "updated_at"], jsonColumns: ["payload"], owned: true },
-  jobkit_salary_cache: { columns: ["cache_key", "payload"], jsonColumns: ["payload"], owned: false },
+  jobkit_apps: { columns: ["user_id", "id", "company", "status", "payload", "updated_at"], jsonColumns: ["payload"], owned: true, primaryKey: ["user_id", "id"] },
+  jobkit_salary_cache: { columns: ["cache_key", "payload"], jsonColumns: ["payload"], owned: false, primaryKey: ["cache_key"] },
 };
 
 const plan = (p: Partial<QueryPlan>): QueryPlan => ({ table: "jobkit_apps", op: "select", filters: [], order: [], ...p });
@@ -55,6 +55,10 @@ describe("compile select", () => {
     assert.deepEqual(out.values, ["open", "2026-01-01"]);
   });
 
+  it("rejects an unsafe limit", () => {
+    assert.throws(() => compile(plan({ limit: 1e21 }), tables), DbCompileError);
+  });
+
   it("compiles nulls first", () => {
     const out = compile(plan({ order: [{ column: "updated_at", ascending: true, nullsFirst: true }] }), tables);
     assert.equal(out.text, 'select * from "jobkit_apps" order by "updated_at" asc nulls first');
@@ -97,8 +101,16 @@ describe("compile mutations", () => {
     assert.match(out.text, /on conflict \("user_id", "id"\) do nothing$/);
   });
 
-  it("rejects an upsert without onConflict", () => {
-    assert.throws(() => compile(plan({ op: "upsert", rows: [{ id: "a" }] }), tables), DbCompileError);
+  it("falls back to the primary key when onConflict is missing", () => {
+    const apps = compile(plan({ op: "upsert", rows: [{ user_id: "u1", id: "a", company: "Acme" }] }), tables);
+    assert.match(apps.text, /on conflict \("user_id", "id"\) do update set "company" = excluded\."company"$/);
+    const cache = compile(plan({ table: "jobkit_salary_cache", op: "upsert", rows: [{ cache_key: "k", payload: { a: 1 } }] }), tables);
+    assert.match(cache.text, /on conflict \("cache_key"\) do update set "payload" = excluded\."payload"$/);
+  });
+
+  it("rejects an upsert without onConflict on a table with no primary key", () => {
+    const bare = { t: { columns: ["a"], jsonColumns: [], owned: false, primaryKey: [] } };
+    assert.throws(() => compile({ table: "t", op: "upsert", rows: [{ a: 1 }], filters: [], order: [] }, bare), DbCompileError);
   });
 
   it("updates with filters and returning", () => {
