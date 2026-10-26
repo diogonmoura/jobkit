@@ -9,7 +9,11 @@ Read `[tracker] backend` in `jobkit.toml` (no `backend` but an `artifact_url` me
 
 ## Hosted web app (`backend = "web"`)
 
-Run `python3 ~/.jobkit/launcher.py sync web` from the data repo and report what it printed: whether `applications.md` changed and how many applications were pushed. On `error: ...` relay the reason (a missing `JOBKIT_ENGINE_TOKEN` or `web_url` is the usual one, or on the older setup `SUPABASE_SECRET_KEY` or `supabase_url`). The rest of this skill is the artifact tracker only.
+Run `python3 ~/.jobkit/launcher.py sync web` from the data repo and report what it printed: whether `applications.md` changed and how many applications were pushed. On `error: ...` relay the reason (a missing `JOBKIT_ENGINE_TOKEN` or `web_url` is the usual one, or on the older setup `SUPABASE_SECRET_KEY` or `supabase_url`).
+
+If `jobkit.toml` also has an `artifact_url`, keep the artifact in step too: after the web sync, run the artifact **Sync** below (skip "First time"). `applications.md` is the hub, so the web app and the artifact each merge with it in turn. If the artifact sync changed `applications.md` (it brought in an edit made in the artifact), run `sync web` once more so the web app gets it. Report both results. A failed web sync doesn't stop the artifact sync, and the other way round. Without an `artifact_url`, stop here.
+
+The daily GitHub Action only reaches the web app: the artifact database is reachable only from a Claude session, so the artifact catches up at the next session that runs this skill.
 
 # Artifact tracker
 
