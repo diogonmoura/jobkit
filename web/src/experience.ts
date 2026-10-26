@@ -1,8 +1,8 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Db } from "./db/types";
 import { buildExperienceBlock } from "../public/jobkit-experience.js";
 
 /** Enabled experience files for the user, capped for the prompt. */
-export async function loadExperience(supabase: SupabaseClient, userId: string) {
+export async function loadExperience(supabase: Db, userId: string) {
   const { data, error } = await supabase
     .from("jobkit_experience_files")
     .select("filename, content, enabled, uploaded_at, version_label, version_date")
@@ -17,7 +17,7 @@ export async function loadExperience(supabase: SupabaseClient, userId: string) {
  * What scoring knows about the candidate. The uploaded experience files (newest first) are the basis, with the
  * master CV as a fallback when there are none; the free-text profile from Preferences is only an optional extra note.
  */
-export async function loadScoringCandidate(supabase: SupabaseClient, userId: string, notes: string): Promise<string> {
+export async function loadScoringCandidate(supabase: Db, userId: string, notes: string): Promise<string> {
   const exp = await loadExperience(supabase, userId);
   let basis = exp.text;
   if (!basis) {

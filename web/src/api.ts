@@ -1,4 +1,8 @@
-import { createServiceSupabase, getOwnerId, jsonResponse, requireUser } from "./auth";
+import { getOwnerId, jsonResponse, requireUser, safeEqual } from "./auth";
+import { dbMode, serviceDb, serviceDbOr } from "./db";
+import { proxyNeonAuth } from "./auth/proxy";
+import { handleDbApi } from "./db/api";
+import { handleEngineApi } from "./engine-api";
 import { handleSetup } from "./setup";
 import { completeChat } from "./llm";
 import type { Env, PreferenceProfile } from "./types";
@@ -19,13 +23,6 @@ import { loadExperience } from "./experience";
 import { buildTailorCvMessages } from "../public/jobkit-cv-prompt.js";
 import { estimateSalary, extractPublishedSalary, extractBenefits } from "./salary";
 
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let d = 0;
-  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return d === 0;
-}
-
 export async function handleApi(
   request: Request,
   env: Env,
@@ -34,6 +31,11 @@ export async function handleApi(
   if (!url.pathname.startsWith("/api/")) return null;
 
   const path = url.pathname.slice("/api".length) || "/";
+
+  // Postgres setups sign in through Neon Auth, proxied so its session cookies are first-party.
+  if (dbMode(env) === "postgres" && (path === "/auth" || path.startsWith("/auth/"))) {
+    return proxyNeonAuth(request, env, path.slice("/auth".length));
+  }
 
   if (path === "/scan/cron" && request.method === "POST") {
     const secret = request.headers.get("X-Scan-Cron-Secret") ?? "";
@@ -44,10 +46,14 @@ export async function handleApi(
     if (!ownerId) {
       return jsonResponse({ error: "Cron not configured: finish /setup first" }, { status: 503 });
     }
-    const admin = createServiceSupabase(env);
+    const admin = serviceDb(env);
     const result = await runJobScan(env, admin, ownerId, "cron", null);
     return jsonResponse({ ok: true, ...result });
   }
+
+  // The engine's token, never a browser session.
+  const engineResponse = await handleEngineApi(request, env, path);
+  if (engineResponse) return engineResponse;
 
   const setupResponse = await handleSetup(request, env, path);
   if (setupResponse) return setupResponse;
@@ -56,7 +62,13 @@ export async function handleApi(
   if (!auth) {
     return jsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
-  const { userId, supabase, pending } = auth;
+  const { userId, db, pending } = auth;
+
+  if (path === "/session" && request.method === "GET") return jsonResponse({ userId });
+
+  if (path === "/db" && request.method === "POST" && dbMode(env) === "postgres") {
+    return handleDbApi(request, env, userId);
+  }
 
   try {
     if (path === "/ai/chat" && request.method === "POST") {
@@ -77,19 +89,19 @@ export async function handleApi(
     }
 
     if (path === "/preferences" && request.method === "GET") {
-      const profile = await loadProfile(supabase, userId);
-      const candidateProfile = await loadCandidateProfile(supabase, userId);
+      const profile = await loadProfile(db, userId);
+      const candidateProfile = await loadCandidateProfile(db, userId);
       return jsonResponse({ profile, candidateProfile }, {}, pending);
     }
 
     if (path === "/preferences" && request.method === "PUT") {
       const body = (await request.json()) as { profile?: PreferenceProfile; candidateProfile?: string };
-      const current = await loadProfile(supabase, userId);
+      const current = await loadProfile(db, userId);
       // The form only edits some fields; keep tiers, liked examples and other structured extras.
       const profile = normalizeProfile({ ...current, ...(body.profile ?? {}) });
-      await saveProfile(supabase, userId, profile);
+      await saveProfile(db, userId, profile);
       if (typeof body.candidateProfile === "string") {
-        const { error } = await supabase
+        const { error } = await db
           .from("jobkit_preference_profile")
           .update({ candidate_profile: body.candidateProfile.slice(0, 20000) })
           .eq("user_id", userId);
@@ -99,7 +111,7 @@ export async function handleApi(
     }
 
     if (path === "/preferences/refresh-ai" && request.method === "POST") {
-      const result = await refreshProfileFromFeedback(env, supabase, userId, request);
+      const result = await refreshProfileFromFeedback(env, db, userId, request);
       return jsonResponse(
         { profile: result.profile, costUsd: result.costUsd },
         {},
@@ -108,7 +120,7 @@ export async function handleApi(
     }
 
     if (path === "/preferences/seed" && request.method === "POST") {
-      const result = await seedProfileFromCv(env, supabase, userId, request);
+      const result = await seedProfileFromCv(env, db, userId, request);
       return jsonResponse(
         { profile: result.profile, costUsd: result.costUsd },
         {},
@@ -117,7 +129,7 @@ export async function handleApi(
     }
 
     if (path === "/scan" && request.method === "POST") {
-      const result = await runJobScan(env, supabase, userId, "manual", request);
+      const result = await runJobScan(env, db, userId, "manual", request);
       return jsonResponse({ ok: true, ...result }, {}, pending);
     }
 
@@ -132,14 +144,14 @@ export async function handleApi(
     }
     if (path === "/watchlist/add" && request.method === "POST") {
       const body = (await request.json().catch(() => ({}))) as { vendor?: string; slug?: string; company?: string; hq?: string; industry?: string };
-      const row = await addBoard(supabase, userId, { vendor: String(body.vendor ?? ""), slug: String(body.slug ?? ""), company: String(body.company ?? ""), hq: body.hq, industry: body.industry });
+      const row = await addBoard(db, userId, { vendor: String(body.vendor ?? ""), slug: String(body.slug ?? ""), company: String(body.company ?? ""), hq: body.hq, industry: body.industry });
       return jsonResponse({ ok: true, target: row }, {}, pending);
     }
 
     // Re-check stored jobs against the role constraints (cached per job unless the rules change or force=true).
     if (path === "/jobs/suitability" && request.method === "POST") {
       const body = (await request.json().catch(() => ({}))) as { force?: boolean };
-      const res = await recheckJobs(env, supabase, userId, request, await loadProfile(supabase, userId), Boolean(body.force));
+      const res = await recheckJobs(env, db, userId, request, await loadProfile(db, userId), Boolean(body.force));
       return jsonResponse({ ok: true, ...res }, {}, pending);
     }
 
@@ -147,7 +159,7 @@ export async function handleApi(
       const body = (await request.json()) as { urls?: unknown };
       const urls = (Array.isArray(body.urls) ? body.urls : []).map(String).filter((x) => /^https?:\/\//.test(x)).slice(0, 8);
       if (!urls.length) return jsonResponse({ error: "No valid links" }, { status: 400 }, pending);
-      const res = await importJobs(env, supabase, userId, request, urls);
+      const res = await importJobs(env, db, userId, request, urls);
       return jsonResponse({ ok: true, ...res }, {}, pending);
     }
 
@@ -162,7 +174,7 @@ export async function handleApi(
       if (!jobId || !["up", "down", "dismiss", "process", "apply"].includes(signal)) {
         return jsonResponse({ error: "Invalid payload" }, { status: 400 }, pending);
       }
-      const { error } = await supabase.from("jobkit_job_feedback").insert({
+      const { error } = await db.from("jobkit_job_feedback").insert({
         user_id: userId,
         job_id: jobId,
         signal,
@@ -170,7 +182,7 @@ export async function handleApi(
       });
       if (error) throw error;
       if (signal === "dismiss") {
-        await supabase
+        await db
           .from("jobkit_jobs")
           .update({
             dismissed: true,
@@ -180,7 +192,7 @@ export async function handleApi(
           .eq("user_id", userId)
           .eq("id", jobId);
       } else if (signal === "down") {
-        await supabase
+        await db
           .from("jobkit_jobs")
           .update({ is_new: false, updated_at: new Date().toISOString() })
           .eq("user_id", userId)
@@ -192,7 +204,7 @@ export async function handleApi(
     if (path === "/jobs/cv" && request.method === "POST") {
       const body = (await request.json()) as { jobId?: string; force?: boolean; instructions?: string; postingText?: string };
       if (!body.jobId) return jsonResponse({ error: "jobId em falta" }, { status: 400 }, pending);
-      const out = await generateJobCv(env, supabase, userId, request, {
+      const out = await generateJobCv(env, db, userId, request, {
         jobId: String(body.jobId),
         force: body.force === true,
         instructions: body.instructions ? String(body.instructions) : "",
@@ -203,7 +215,7 @@ export async function handleApi(
 
     // Read-only: what the experience files contribute to the CV prompt (no AI call).
     if (path === "/experience/preview" && request.method === "GET") {
-      const exp = await loadExperience(supabase, userId);
+      const exp = await loadExperience(db, userId);
       const msgs = buildTailorCvMessages({ masterCv: "(master)", postingText: "(posting)", company: "", role: "", experience: exp.text });
       const user = String(msgs[1]?.content ?? "");
       const at = user.indexOf("<experience_notes>");
@@ -216,7 +228,7 @@ export async function handleApi(
     if (path === "/jobs/answers" && request.method === "POST") {
       const body = (await request.json()) as { jobId?: string; force?: boolean; instructions?: string; manualQuestions?: string[] };
       if (!body.jobId) return jsonResponse({ error: "jobId em falta" }, { status: 400 }, pending);
-      const out = await generateJobAnswers(env, supabase, userId, request, {
+      const out = await generateJobAnswers(env, db, userId, request, {
         jobId: String(body.jobId),
         force: body.force === true,
         instructions: body.instructions ? String(body.instructions) : "",
@@ -238,7 +250,7 @@ export async function handleApi(
       let role = String(body.role ?? "");
       let location = String(body.location ?? "");
       if (jobId) {
-        const { data: job } = await supabase
+        const { data: job } = await db
           .from("jobkit_jobs")
           .select("role, location, posting_text, salary")
           .eq("user_id", userId)
@@ -259,7 +271,7 @@ export async function handleApi(
       if (published) {
         const salary = { published, benefits };
         if (jobId) {
-          await supabase
+          await db
             .from("jobkit_jobs")
             .update({ salary, benefits, updated_at: new Date().toISOString() })
             .eq("user_id", userId)
@@ -267,8 +279,8 @@ export async function handleApi(
         }
         return jsonResponse({ salary }, {}, pending);
       }
-      const admin = env.SUPABASE_SERVICE_ROLE_KEY ? createServiceSupabase(env) : supabase;
-      const profile = await loadProfile(supabase, userId);
+      const admin = serviceDbOr(env, db);
+      const profile = await loadProfile(db, userId);
       const seniority = String(body.seniority ?? profile.seniority[0] ?? "mid");
       const { estimate, costUsd } = await estimateSalary(
         env,
@@ -281,7 +293,7 @@ export async function handleApi(
       );
       const salary = { estimate, benefits };
       if (jobId) {
-        await supabase
+        await db
           .from("jobkit_jobs")
           .update({ salary, benefits, updated_at: new Date().toISOString() })
           .eq("user_id", userId)

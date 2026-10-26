@@ -1,5 +1,5 @@
 import { langName } from "./i18n";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Db } from "./db/types";
 import type { Env } from "./types";
 import { completeChat, type ChatMessage } from "./llm";
 import { loadCandidateProfile } from "./preferences";
@@ -101,7 +101,7 @@ function parseJsonArray(text: string): any[] {
  * Returns the stored answers without any AI call unless force is true.
  */
 export async function generateJobAnswers(
-  env: Env, supabase: SupabaseClient, userId: string, request: Request,
+  env: Env, supabase: Db, userId: string, request: Request,
   opts: { jobId: string; force?: boolean; instructions?: string; manualQuestions?: string[] },
 ): Promise<JobAnswers & { cached: boolean }> {
   const { data: job, error } = await supabase

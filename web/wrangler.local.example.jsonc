@@ -11,7 +11,10 @@
     "JOBKIT_LANG": "en", // or "pt-PT"
     "LOGO_DEV_TOKEN": "", // optional logo.dev publishable token (pk_...) for company logos
     "ADZUNA_COUNTRY": "gb"
-    // External sign-in (another app on the same Supabase project signs users in):
+    // Cloudflare + Neon (setup 3) instead of the two SUPABASE_ lines above. Put DATABASE_URL and
+    // JOBKIT_ENGINE_TOKEN in with `npx wrangler secret put`, never here.
+    // "JOBKIT_DB": "postgres", "NEON_AUTH_BASE_URL": "<Neon Auth URL from the database's Neon Auth tab>",
+    // External sign-in, Supabase only (another app on the same Supabase project signs users in):
     // "AUTH_MODE": "external", "LOGIN_URL": "https://app.example.com/login", "COOKIE_DOMAIN": ".example.com",
     // "LOGOUT_URL": "https://app.example.com/logout", "SETTINGS_URL": "https://app.example.com/settings",
     // "HOME_URL": "https://app.example.com", "HOME_LABEL": "Dashboard",

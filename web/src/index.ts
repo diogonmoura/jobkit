@@ -1,4 +1,6 @@
-import { applyCookies, createServiceSupabase, createSupabaseFromRequest, getOwnerId, supabaseConfigured } from "./auth";
+import { applyCookies, getOwnerId, neonOwnerId } from "./auth";
+import { dbConfigured, dbMode, serviceDb } from "./db";
+import { createSupabaseFromRequest, type CookiePending } from "./db/supabase";
 import { handleApi } from "./api";
 import { loadProfile } from "./preferences";
 import { runJobScan } from "./scan/pipeline";
@@ -16,6 +18,8 @@ const PUBLIC_PATHS = new Set([
   "/login.html",
   "/jobkit-tracker.css",
   "/jobkit-theme.js",
+  // Static client code (no secrets) the Postgres wizard loads after sign-in; a redirect here would break its import.
+  "/jobkit-remote-db.js",
   "/setup/jobkit-schema.sql",
 ]);
 
@@ -53,8 +57,14 @@ function configScript(env: Env): string {
     homeLabel: env.HOME_LABEL || "",
     cookieDomain: env.COOKIE_DOMAIN || "",
   };
+  const mode = dbMode(env);
+  // On Postgres the browser signs in through /api/auth, so it gets no Supabase client config.
+  const supabase = mode === "postgres" ? null : { url: env.SUPABASE_URL ?? "", anonKey: env.SUPABASE_ANON_KEY ?? "", auth };
   return (
-    `window.__JOBKIT_SUPABASE=${JSON.stringify({ url: env.SUPABASE_URL ?? "", anonKey: env.SUPABASE_ANON_KEY ?? "", auth })};` +
+    `window.__JOBKIT_DB=${JSON.stringify({ mode })};` +
+    `window.__JOBKIT_SUPABASE=${JSON.stringify(supabase)};` +
+    // The page links the Supabase block carries on setup 1; none of these are secrets.
+    (mode === "postgres" ? `window.__JOBKIT_NAV=${JSON.stringify({ logoutUrl: auth.logoutUrl, settingsUrl: auth.settingsUrl, homeUrl: auth.homeUrl, homeLabel: auth.homeLabel })};` : "") +
     `window.__JOBKIT_LANG=${JSON.stringify(env.JOBKIT_LANG || "en")};` +
     `window.__JOBKIT_LOGO_TOKEN=${JSON.stringify(publishableLogoToken(env))};`
   );
@@ -76,12 +86,12 @@ async function servePage(request: Request, env: Env, file: string): Promise<Resp
 
 export default {
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    if (!supabaseConfigured(env)) return;
+    if (!dbConfigured(env)) return;
     ctx.waitUntil(
       (async () => {
         const owner = await getOwnerId(env);
         if (!owner) return;
-        await runJobScan(env, createServiceSupabase(env), owner, "cron", null);
+        await runJobScan(env, serviceDb(env), owner, "cron", null);
       })().catch(() => {}),
     );
   },
@@ -102,28 +112,36 @@ export default {
     }
     if (url.pathname === "/setup" || url.pathname === "/setup.html") return servePage(request, env, "/setup");
     if (url.pathname === "/login" || url.pathname === "/login.html") {
-      if (!supabaseConfigured(env)) return redirect("/setup", request);
+      if (!dbConfigured(env)) return redirect("/setup", request);
       // Sign-in happens in the other app; "/" sends signed-out visitors there.
       if (externalAuth(env)) return redirect("/", request);
       return servePage(request, env, "/login");
     }
     if (PUBLIC_PATHS.has(url.pathname) || url.pathname.startsWith("/vendor/")) return env.ASSETS.fetch(request);
 
-    if (!supabaseConfigured(env)) return redirect("/setup", request);
+    if (!dbConfigured(env)) return redirect("/setup", request);
 
     const owner = await getOwnerId(env);
     if (!owner) return redirect("/setup", request);
 
-    const { supabase, pending } = createSupabaseFromRequest(request, env);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user || user.id !== owner) {
+    let userId: string | null;
+    let pending: CookiePending[] = [];
+    if (dbMode(env) === "postgres") {
+      userId = await neonOwnerId(request, env, { ownerId: async () => owner });
+    } else {
+      const client = createSupabaseFromRequest(request, env);
+      pending = client.pending;
+      const {
+        data: { user },
+      } = await client.supabase.auth.getUser();
+      userId = user && user.id === owner ? user.id : null;
+    }
+    if (!userId) {
       return applyCookies(redirect(loginRedirect(request, env), request), pending);
     }
 
     if (url.pathname === "/" || url.pathname === "/index.html") {
-      const profile = await loadProfile(createServiceSupabase(env), user.id).catch(() => null);
+      const profile = await loadProfile(serviceDb(env), userId).catch(() => null);
       // Only a fresh profile goes to the wizard; an instance set up before the wizard existed keeps working.
       if (profile && !profile.onboarded_at && !profile.roles.length) return applyCookies(redirect("/setup", request), pending);
       return applyCookies(await servePage(request, env, "/"), pending);

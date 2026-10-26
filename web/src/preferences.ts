@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Db } from "./db/types";
 import type { Env, PreferenceProfile, RubricWeights } from "./types";
 import { completeChat, type ChatMessage } from "./llm";
 
@@ -110,7 +110,7 @@ function normalizeTiers(v: unknown): NonNullable<PreferenceProfile["title_tiers"
 }
 
 /** Load the free-text candidate profile (long markdown) kept next to the structured preferences. */
-export async function loadCandidateProfile(supabase: SupabaseClient, userId: string): Promise<string> {
+export async function loadCandidateProfile(supabase: Db, userId: string): Promise<string> {
   const { data } = await supabase
     .from("jobkit_preference_profile")
     .select("candidate_profile")
@@ -120,7 +120,7 @@ export async function loadCandidateProfile(supabase: SupabaseClient, userId: str
 }
 
 export async function loadProfile(
-  supabase: SupabaseClient,
+  supabase: Db,
   userId: string,
 ): Promise<PreferenceProfile> {
   const { data } = await supabase
@@ -133,7 +133,7 @@ export async function loadProfile(
 }
 
 export async function saveProfile(
-  supabase: SupabaseClient,
+  supabase: Db,
   userId: string,
   profile: PreferenceProfile,
 ): Promise<void> {
@@ -157,7 +157,7 @@ export async function saveProfile(
 const SEED_COMPANIES: { company: string; vendor: string; slug: string }[] = [];
 
 export async function seedScanTargets(
-  supabase: SupabaseClient,
+  supabase: Db,
   userId: string,
   profile: PreferenceProfile,
 ): Promise<number> {
@@ -187,7 +187,7 @@ export async function seedScanTargets(
 
 export async function seedProfileFromCv(
   env: Env,
-  supabase: SupabaseClient,
+  supabase: Db,
   userId: string,
   request: Request | null,
 ): Promise<{ profile: PreferenceProfile; costUsd: number }> {
@@ -251,7 +251,7 @@ export async function seedProfileFromCv(
 
 export async function refreshProfileFromFeedback(
   env: Env,
-  supabase: SupabaseClient,
+  supabase: Db,
   userId: string,
   request: Request | null,
 ): Promise<{ profile: PreferenceProfile; costUsd: number }> {

@@ -120,7 +120,9 @@ export function createJobkitDb(supabase, userId) {
     for (const cb of preferencesListeners) cb(snap);
   }
 
-  const channel = supabase
+  // Supabase pushes changes over Realtime. The Postgres client has no channel, so there the page
+  // reloads after its own writes and whenever the tab becomes visible again.
+  const channel = typeof supabase.channel !== "function" ? null : supabase
     .channel(`jobkit-tracker-${userId}`)
     .on(
       "postgres_changes",
@@ -173,6 +175,12 @@ export function createJobkitDb(supabase, userId) {
       () => loadPreferences().catch(() => {}),
     )
     .subscribe();
+
+  const onVisible = () => {
+    if (document.visibilityState !== "visible") return;
+    for (const load of [loadApps, loadFollowing, loadProfile, loadJobs, loadPreferences]) load().catch(() => {});
+  };
+  if (!channel && typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
 
   void loadApps();
   void loadFollowing();
@@ -384,7 +392,8 @@ export function createJobkitDb(supabase, userId) {
       };
     },
     dispose() {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
+      else if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisible);
     },
   };
 }

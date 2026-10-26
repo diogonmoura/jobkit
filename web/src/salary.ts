@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Db } from "./db/types";
 import type { Env, SalaryPayload } from "./types";
 import { completeChat, type ChatMessage } from "./llm";
 
@@ -39,7 +39,7 @@ export async function estimateSalariesBatch(
   userId: string,
   request: Request | null,
   items: { role: string; seniority: string; location: string }[],
-  db: SupabaseClient,
+  db: Db,
 ): Promise<{ estimates: Map<string, NonNullable<SalaryPayload["estimate"]>>; costUsd: number }> {
   const estimates = new Map<string, NonNullable<SalaryPayload["estimate"]>>();
   const keys = [...new Set(items.map((i) => salaryCacheKey(i.role, i.seniority, i.location)))];
@@ -133,7 +133,7 @@ export function salaryCacheKey(role: string, seniority: string, location: string
 }
 
 export async function loadSalaryCache(
-  admin: SupabaseClient,
+  admin: Db,
   key: string,
 ): Promise<SalaryPayload["estimate"] | null> {
   const { data } = await admin
@@ -147,7 +147,7 @@ export async function loadSalaryCache(
 }
 
 export async function saveSalaryCache(
-  admin: SupabaseClient,
+  admin: Db,
   key: string,
   role: string,
   seniority: string,
@@ -174,7 +174,7 @@ export async function estimateSalary(
   role: string,
   seniority: string,
   location: string,
-  admin: SupabaseClient,
+  admin: Db,
 ): Promise<{ estimate: NonNullable<SalaryPayload["estimate"]>; costUsd: number }> {
   const key = salaryCacheKey(role, seniority, location);
   const cached = await loadSalaryCache(admin, key);

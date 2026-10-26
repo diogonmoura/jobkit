@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Db } from "../db/types";
 import type { Env, PreferenceProfile } from "../types";
 import { completeChat, type ChatMessage } from "../llm";
 import { loadExperience } from "../experience";
@@ -40,7 +40,7 @@ export function suitabilityRules(profile: PreferenceProfile): { rules: string[];
 }
 
 /** A short candidate summary from the newest uploaded experience files (falls back to the master CV). */
-export async function candidateSummary(supabase: SupabaseClient, userId: string): Promise<string> {
+export async function candidateSummary(supabase: Db, userId: string): Promise<string> {
   const exp = await loadExperience(supabase, userId);
   let text = exp.text;
   if (!text) {
@@ -116,7 +116,7 @@ export function titleVerdict(profile: PreferenceProfile, title: string): Suitabi
 }
 
 /** Check stored jobs (cached per job; only re-checked when the constraints change or force is set). */
-export async function recheckJobs(env: Env, supabase: SupabaseClient, userId: string, request: Request | null, profile: PreferenceProfile, force = false) {
+export async function recheckJobs(env: Env, supabase: Db, userId: string, request: Request | null, profile: PreferenceProfile, force = false) {
   const { key } = suitabilityRules(profile);
   const { data: jobs, error } = await supabase.from("jobkit_jobs").select("id, company, role, posting_text, suitability").eq("user_id", userId).eq("dismissed", false);
   if (error) throw error;

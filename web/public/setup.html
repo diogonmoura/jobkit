@@ -42,6 +42,16 @@
     <!-- 1 · Database -->
     <section class="mf-card mf-glass setup-card" data-panel="db" hidden>
       <p class="mf-eyebrow">Step 1 of 5</p>
+      <div id="db-pg" hidden>
+        <h2>Prepare your database</h2>
+        <p class="mf-muted">jobkit stores everything in your own Neon Postgres database and signs you in with Neon Auth. The connection string stays on the Worker and is never sent to the browser.</p>
+        <ul class="checks" id="pg-checks"></ul>
+        <p class="mf-muted" id="pg-origin" hidden></p>
+        <div class="setup-actions"><button type="button" class="mf-btn mf-btn--primary" id="pg-prepare">Prepare database</button><span class="status-line" id="pg-status"></span></div>
+        <p class="hint">Prepare database creates the jobkit tables. It is safe to run again after an upgrade.</p>
+      </div>
+
+      <div id="db-sb">
       <h2>Connect Supabase</h2>
       <p class="mf-muted">jobkit stores everything in your own Supabase project (the free tier is enough). The Worker reads three values from its configuration:</p>
       <details class="how" open>
@@ -87,6 +97,8 @@
         <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" id="copy-sql">Copy SQL</button></div>
       </div>
 
+      </div>
+
       <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" id="db-recheck">Check again</button><span class="spacer"></span><button type="button" class="mf-btn mf-btn--primary" id="db-next" disabled>Continue</button></div>
     </section>
 
@@ -104,7 +116,8 @@
         <div class="setup-actions"><button type="button" class="mf-btn mf-btn--primary" id="acct-create">Create account</button><button type="button" class="mf-btn mf-btn--ghost" id="acct-signin">I already have one: sign in</button><span class="status-line" id="acct-status"></span></div>
       </div>
       <div id="acct-done" hidden><ul class="checks"><li class="ok"><span>Signed in as <b id="acct-who"></b> (owner)</span></li></ul>
-        <p class="hint">Tip: in Supabase, <b>Authentication → Sign In / Providers</b>, turn off “Allow new users to sign up” now that you have your account. If email confirmation is on, confirm your address before signing in.</p></div>
+        <p class="hint" id="acct-pg-hint" hidden>Now switch off Sign-up with Email in the Neon console (Settings, Better Auth) so nobody else can create an account.</p>
+        <p class="hint" id="acct-sb-hint">Tip: in Supabase, <b>Authentication → Sign In / Providers</b>, turn off “Allow new users to sign up” now that you have your account. If email confirmation is on, confirm your address before signing in.</p></div>
       <div class="setup-actions"><button type="button" class="mf-btn mf-btn--ghost" data-go="db">Back</button><span class="spacer"></span><button type="button" class="mf-btn mf-btn--primary" id="acct-next" disabled>Continue</button></div>
     </section>
 

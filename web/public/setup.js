@@ -1,4 +1,5 @@
 // First-run setup wizard. Talks to /api/setup/* on this Worker; Supabase auth uses the publishable key only.
+// On Postgres setups (JOBKIT_DB=postgres) accounts live in Neon Auth, reached through /api/auth/*.
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => (t.hidden = true), 3500); }
@@ -11,6 +12,7 @@ async function api(path, { method = "GET", body } = {}) {
   return json;
 }
 
+const PG = window.__JOBKIT_DB?.mode === "postgres";
 let status = null;
 let client = null;
 let boards = [];
@@ -19,7 +21,9 @@ const ORDER = ["db", "account", "llm", "prefs", "done"];
 
 function doneMap() {
   const s = status;
-  const dbOk = Boolean(s?.supabase.configured && s.supabase.checks?.schema.ok && s.encKey);
+  const dbOk = PG
+    ? Boolean(s?.supabase.configured && s.db && !s.db.error && s.db.pendingMigrations.length === 0 && s.db.neonAuth.reachable && s.db.neonAuth.originTrusted && s.encKey)
+    : Boolean(s?.supabase.configured && s.supabase.checks?.schema.ok && s.encKey);
   return { db: dbOk, account: dbOk && s.isOwner, llm: s?.isOwner && s.llm.configured, prefs: s?.isOwner && s.prefsSaved, done: s?.onboarded };
 }
 function firstOpen() { const d = doneMap(); return ORDER.find((k) => !d[k]) ?? "done"; }
@@ -66,7 +70,25 @@ function renderConfig(url, anon, needEncKey, needSupabase) {
   $("db-config").hidden = false;
 }
 
+function renderDbPg() {
+  const d = status.db;
+  $("db-sb").hidden = true; $("db-pg").hidden = false;
+  const na = d.neonAuth;
+  $("pg-checks").innerHTML = !status.supabase.configured
+    ? checkLi(false, "Configuration", "Set DATABASE_URL and NEON_AUTH_BASE_URL on the Worker, then click Check again")
+    : checkLi(!d.error, "Database", d.error || d.host) +
+      checkLi(!d.error && d.pendingMigrations.length === 0, "Tables", d.error ? "Unknown" : d.pendingMigrations.length ? `${d.pendingMigrations.length} migration(s) to apply` : "All jobkit tables are present") +
+      checkLi(na.reachable && na.originTrusted, "Neon Auth", !na.reachable ? "Could not be reached: check NEON_AUTH_BASE_URL" : na.originTrusted ? "Reachable, and this site is trusted" : "This site is not trusted yet") +
+      checkLi(status.encKey, "SETTINGS_ENC_KEY", status.encKey ? "Set (encrypts your AI key)" : "Missing: set a 64 character hex string as a Worker secret");
+  const origin = $("pg-origin");
+  origin.hidden = !(na.reachable && !na.originTrusted);
+  origin.textContent = `Add ${na.origin} to Neon Auth's trusted domains: Neon console, Settings, Better Auth, Domains. Then click Check again.`;
+  $("pg-prepare").disabled = !status.supabase.configured || !d.pendingMigrations.length;
+  $("db-next").disabled = !doneMap().db;
+}
+
 function renderDb() {
+  if (PG) { renderDbPg(); return; }
   const s = status.supabase;
   $("db-unconfigured").hidden = s.configured;
   $("db-config").hidden = true;
@@ -84,6 +106,11 @@ function renderDb() {
 
 async function ensureClient() {
   if (client) return client;
+  if (PG) {
+    const { createRemoteClient } = await import("/jobkit-remote-db.js");
+    client = createRemoteClient();
+    return client;
+  }
   const cfg = window.__JOBKIT_SUPABASE;
   if (!cfg?.url || !cfg?.anonKey) return null;
   const { createBrowserClient } = await import("https://esm.sh/@supabase/ssr@0.6.1");
@@ -94,6 +121,7 @@ async function ensureClient() {
 function renderAccount() {
   const owned = status.owner;
   $("acct-token-wrap").hidden = !status.setupTokenRequired;
+  $("acct-pg-hint").hidden = !PG; $("acct-sb-hint").hidden = PG;
   if (status.isOwner) {
     $("acct-form").hidden = true; $("acct-done").hidden = false; $("acct-who").textContent = status.email;
     $("acct-title").textContent = "Your account"; $("acct-lede").textContent = "You are the owner of this jobkit.";
@@ -147,6 +175,15 @@ $("sb-test").addEventListener("click", async () => {
     if (ok) renderConfig(url.replace(/\/+$/, ""), anon, !status.encKey, true);
   } catch (e) { setStatus("sb-test-status", e.message, "err"); }
 });
+$("pg-prepare").addEventListener("click", async () => {
+  setStatus("pg-status", "Preparing…");
+  try {
+    const r = await api("prepare-db", { method: "POST" });
+    await refresh();
+    setStatus("pg-status", r.applied.length ? `Applied ${r.applied.length} migration(s).` : "Already up to date.", "okc");
+    go("db");
+  } catch (e) { setStatus("pg-status", e.message, "err"); }
+});
 $("db-recheck").addEventListener("click", async () => { await refresh(); toast(doneMap().db ? "Database ready" : "Not ready yet"); go("db"); });
 $("db-next").addEventListener("click", () => go("account"));
 $("copy-sql").addEventListener("click", async () => { const t = await (await fetch("/setup/jobkit-schema.sql")).text(); await navigator.clipboard.writeText(t).then(() => toast("SQL copied"), () => toast("Copy failed: use the download link")); });
@@ -158,6 +195,13 @@ document.addEventListener("click", (e) => {
 });
 
 // ---- step 2
+// Postgres: Neon Auth through the Worker's /api/auth passthrough (first-party session cookie).
+async function neonAuth(path, body) {
+  const res = await fetch("/api/auth" + path, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(json.message || json.error || "Something went wrong. Try again."); e.status = res.status; e.code = json.code; throw e; }
+  return json;
+}
 async function claim() {
   const token = $("acct-token").value.trim();
   await api("claim", { method: "POST", body: { token } });
@@ -167,6 +211,16 @@ $("acct-create").addEventListener("click", async () => {
   if (!email || password.length < 8) { setStatus("acct-status", "Enter an email and a password of 8+ characters", "err"); return; }
   setStatus("acct-status", "Creating…");
   try {
+    if (PG) {
+      // A retry after a failed claim finds the account already there: carry on with sign-in.
+      let existed = false;
+      try { await neonAuth("/sign-up/email", { name: email.split("@")[0], email, password }); }
+      catch (e) { if (!(e.code === "USER_ALREADY_EXISTS" || e.status === 422)) throw e; existed = true; }
+      try { await neonAuth("/sign-in/email", { email, password }); }
+      catch (e) { throw existed ? new Error("This email already has an account and the password did not match. Use \"I already have one: sign in\" with the right password.") : e; }
+      await claim(); await refresh(); setStatus("acct-status", ""); toast("Account created"); go("account");
+      return;
+    }
     const sb = await ensureClient();
     const { data, error } = await sb.auth.signUp({ email, password });
     if (error) throw error;
@@ -179,6 +233,14 @@ $("acct-signin").addEventListener("click", async () => {
   if (!email || !password) { setStatus("acct-status", "Enter your email and password", "err"); return; }
   setStatus("acct-status", "Signing in…");
   try {
+    if (PG) {
+      await neonAuth("/sign-in/email", { email, password });
+      if (!status.owner) await claim();
+      await refresh();
+      if (!status.isOwner) { setStatus("acct-status", "This account is not the owner of this jobkit.", "err"); return; }
+      setStatus("acct-status", ""); go("account");
+      return;
+    }
     const sb = await ensureClient();
     const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
@@ -278,7 +340,8 @@ $("p-save").addEventListener("click", async () => {
   try {
     await api("preferences", { method: "POST", body: { answers, boards: boards.filter((b) => b.checked !== false) } });
     const sb = await ensureClient();
-    const { data: { user } } = await sb.auth.getUser();
+    // On Postgres the Worker sets user_id from the session, so the browser does not need it.
+    const user = PG ? { id: undefined } : (await sb.auth.getUser()).data.user;
     if ($("p-cv").files.length) {
       const [cv] = await readFiles($("p-cv"));
       if (cv) { const { error } = await sb.from("jobkit_profile").upsert({ user_id: user.id, master_cv: cv.content, updated_at: new Date().toISOString() }, { onConflict: "user_id" }); if (error) throw error; status.cvSaved = cv.filename; }
@@ -303,7 +366,7 @@ function renderDone() {
   const n = (status.prefsData?.targets || []).filter((x) => x.enabled).length;
   $("done-summary").textContent = `jobkit will look for ${[...(t.T1 || []), ...(t.T2 || [])].slice(0, 3).join(", ") || "your target roles"}${p.remote_policy === "remote_only" ? ", remote only" : ""}.`;
   $("done-checks").innerHTML =
-    checkLi(true, "Database", status.supabase.url.replace(/^https?:\/\//, "")) +
+    checkLi(true, "Database", PG ? status.db.host : status.supabase.url.replace(/^https?:\/\//, "")) +
     checkLi(true, "Owner", status.email) +
     checkLi(true, "AI model", `${status.llm.provider}${status.llm.model ? " · " + status.llm.model : ""}`) +
     checkLi(true, "Preferences", `${(p.roles || []).length} roles · min score ${p.min_score ?? 50}`) +
@@ -318,7 +381,8 @@ $("finish").addEventListener("click", async () => {
 // ---- boot
 (async () => {
   try { await refresh(); } catch (e) { toast("Could not load setup status: " + e.message); return; }
-  if (status.supabase.configured && status.supabase.checks?.schema.ok) await ensureClient();
+  // Supabase only: on Postgres the remote client is loaded after sign-in, where it is needed.
+  if (!PG && status.supabase.configured && status.supabase.checks?.schema.ok) { try { await ensureClient(); } catch { /* optional here; used again when needed */ } }
   const want = location.hash.slice(1);
   go(ORDER.includes(want) && canOpen(want) ? want : firstOpen());
 })();

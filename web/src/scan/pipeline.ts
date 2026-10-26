@@ -1,6 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Db } from "../db/types";
 import type { Env, PreferenceProfile, RawOpening, ScoreBreakdown } from "../types";
-import { createServiceSupabase } from "../auth";
+import { serviceDbOr } from "../db";
 import { loadScoringCandidate } from "../experience";
 import { classifySuitability, candidateSummary, titleVerdict, isEngineeringTitle, type Suitability } from "./suitability";
 import { completeChat, type ChatMessage } from "../llm";
@@ -216,7 +216,7 @@ export async function scoreOpenings(
 
 export async function runJobScan(
   env: Env,
-  supabase: SupabaseClient,
+  supabase: Db,
   userId: string,
   trigger: "cron" | "manual",
   request: Request | null,
@@ -317,7 +317,7 @@ export async function runJobScan(
     costUsd += r.costUsd;
   }
 
-  const salaryDb = env.SUPABASE_SERVICE_ROLE_KEY ? createServiceSupabase(env) : supabase;
+  const salaryDb = serviceDbOr(env, supabase);
   const seniority = profile.seniority[0] ?? "Senior";
   const prepared = top.map((item, n) => {
     const published = extractPublishedSalary(item.opening.description);
@@ -464,7 +464,7 @@ export type ImportResult = { url: string; ok: boolean; id?: string; error?: stri
 /** Add specific postings to Jobs: full text, rubric score (no minimum), standard flags, salary, and a 👍 signal. No CV/answers. */
 export async function importJobs(
   env: Env,
-  supabase: SupabaseClient,
+  supabase: Db,
   userId: string,
   request: Request | null,
   urls: string[],
@@ -509,7 +509,7 @@ export async function importJobs(
   }));
   let estimates = new Map<string, unknown>();
   try {
-    const salaryDb = env.SUPABASE_SERVICE_ROLE_KEY ? createServiceSupabase(env) : supabase;
+    const salaryDb = serviceDbOr(env, supabase);
     const need = prepared.filter((p) => !p.published).map((p) => ({ role: p.o.title, seniority, location: p.loc }));
     if (need.length) {
       const r = await estimateSalariesBatch(env, userId, request, need, salaryDb);
