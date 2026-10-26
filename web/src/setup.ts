@@ -1,6 +1,8 @@
 import type { Db } from "./db/types";
-import { createSupabaseFromRequest, getOwnerId, jsonResponse } from "./auth";
-import { dbConfigured, serviceDb } from "./db";
+import { getOwnerId, jsonResponse } from "./auth";
+import { neonSessionUser } from "./auth/neon";
+import { dbConfigured, dbMode, serviceDb } from "./db";
+import { createSupabaseFromRequest } from "./db/supabase";
 import { encryptSecret, loadLlmSettings, PROVIDERS, testLlmKey, type LlmProvider } from "./llm";
 import { loadProfile, normalizeProfile, saveProfile } from "./preferences";
 import type { Env, PreferenceProfile } from "./types";
@@ -108,6 +110,11 @@ function encKeyOk(env: Env): boolean {
 
 async function currentUser(request: Request, env: Env) {
   if (!dbConfigured(env)) return { user: null, supabase: null, pending: [] as never[] };
+  if (dbMode(env) === "postgres") {
+    // Any signed-in Neon Auth user: the wizard itself decides who may claim or change setup.
+    const u = await neonSessionUser(request, env);
+    return { user: u ? { id: u.userId, email: u.email } : null, supabase: null, pending: [] as never[] };
+  }
   const { supabase, pending } = createSupabaseFromRequest(request, env);
   const { data } = await supabase.auth.getUser();
   return { user: data.user, supabase, pending };

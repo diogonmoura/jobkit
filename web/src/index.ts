@@ -1,5 +1,6 @@
-import { applyCookies, createSupabaseFromRequest, getOwnerId } from "./auth";
-import { dbConfigured, serviceDb } from "./db";
+import { applyCookies, getOwnerId, neonOwnerId } from "./auth";
+import { dbConfigured, dbMode, serviceDb } from "./db";
+import { createSupabaseFromRequest, type CookiePending } from "./db/supabase";
 import { handleApi } from "./api";
 import { loadProfile } from "./preferences";
 import { runJobScan } from "./scan/pipeline";
@@ -54,8 +55,12 @@ function configScript(env: Env): string {
     homeLabel: env.HOME_LABEL || "",
     cookieDomain: env.COOKIE_DOMAIN || "",
   };
+  const mode = dbMode(env);
+  // On Postgres the browser signs in through /api/auth, so it gets no Supabase client config.
+  const supabase = mode === "postgres" ? null : { url: env.SUPABASE_URL ?? "", anonKey: env.SUPABASE_ANON_KEY ?? "", auth };
   return (
-    `window.__JOBKIT_SUPABASE=${JSON.stringify({ url: env.SUPABASE_URL ?? "", anonKey: env.SUPABASE_ANON_KEY ?? "", auth })};` +
+    `window.__JOBKIT_DB=${JSON.stringify({ mode })};` +
+    `window.__JOBKIT_SUPABASE=${JSON.stringify(supabase)};` +
     `window.__JOBKIT_LANG=${JSON.stringify(env.JOBKIT_LANG || "en")};` +
     `window.__JOBKIT_LOGO_TOKEN=${JSON.stringify(publishableLogoToken(env))};`
   );
@@ -115,16 +120,24 @@ export default {
     const owner = await getOwnerId(env);
     if (!owner) return redirect("/setup", request);
 
-    const { supabase, pending } = createSupabaseFromRequest(request, env);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user || user.id !== owner) {
+    let userId: string | null;
+    let pending: CookiePending[] = [];
+    if (dbMode(env) === "postgres") {
+      userId = await neonOwnerId(request, env, { ownerId: async () => owner });
+    } else {
+      const client = createSupabaseFromRequest(request, env);
+      pending = client.pending;
+      const {
+        data: { user },
+      } = await client.supabase.auth.getUser();
+      userId = user && user.id === owner ? user.id : null;
+    }
+    if (!userId) {
       return applyCookies(redirect(loginRedirect(request, env), request), pending);
     }
 
     if (url.pathname === "/" || url.pathname === "/index.html") {
-      const profile = await loadProfile(serviceDb(env), user.id).catch(() => null);
+      const profile = await loadProfile(serviceDb(env), userId).catch(() => null);
       // Only a fresh profile goes to the wizard; an instance set up before the wizard existed keeps working.
       if (profile && !profile.onboarded_at && !profile.roles.length) return applyCookies(redirect("/setup", request), pending);
       return applyCookies(await servePage(request, env, "/"), pending);

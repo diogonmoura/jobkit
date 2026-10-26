@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createServiceSupabase, supabaseConfigured } from "../auth";
+import { createServiceSupabase, supabaseConfigured } from "./supabase";
 import type { Env } from "../types";
 import { createPostgresDb, neonRunner } from "./postgres";
 import type { Db } from "./types";
