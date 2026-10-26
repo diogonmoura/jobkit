@@ -48,7 +48,7 @@ function parseSchema(sources: string[]): Record<string, Parsed> {
       }
       tables[m[1]] = t;
     }
-    for (const m of sql.matchAll(/alter table\s+(?:public\.)?(jobkit_\w+)\s+((?:add column if not exists[^;]*?)+);/gi)) {
+    for (const m of sql.matchAll(/alter table\s+(?:public\.)?(jobkit_\w+)\s+([^;]*);/gi)) {
       for (const c of m[2].matchAll(/add column if not exists (\w+)/gi)) if (!tables[m[1]].columns.includes(c[1])) tables[m[1]].columns.push(c[1]);
     }
   }

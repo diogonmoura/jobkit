@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { neonAuthBase } from "./neon";
 
 /** The Better Auth endpoints jobkit uses. Anything else under /api/auth is a 404 and never reaches Neon. */
 const ALLOWED_PATHS = new Set([
@@ -34,7 +35,7 @@ function errorResponse(status: number, error: string): Response {
  */
 export async function proxyNeonAuth(request: Request, env: Env, path: string, fetchImpl: typeof fetch = fetch): Promise<Response> {
   if (!ALLOWED_PATHS.has(path)) return errorResponse(404, "Not found");
-  const base = env.NEON_AUTH_BASE_URL?.trim().replace(/\/+$/, "");
+  const base = neonAuthBase(env);
   if (!base) return errorResponse(503, "Neon Auth is not configured");
 
   const headers = new Headers(request.headers);

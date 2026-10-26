@@ -22,9 +22,15 @@ function jwksFor(base: string, fetchImpl: typeof fetch): Jwks {
   return jwks;
 }
 
+/** NEON_AUTH_BASE_URL without trailing slashes, or "" when unset. A loop rather than /\/+$/, which is quadratic on long runs of slashes. */
+export function neonAuthBase(env: Env): string {
+  let base = (env.NEON_AUTH_BASE_URL ?? "").trim();
+  while (base.endsWith("/")) base = base.slice(0, -1);
+  return base;
+}
+
 function baseUrl(env: Env): string | null {
-  const base = env.NEON_AUTH_BASE_URL?.trim().replace(/\/+$/, "");
-  return base || null;
+  return neonAuthBase(env) || null;
 }
 
 /** Verifies a Neon Auth JWT (EdDSA, issuer = origin of the base URL). Null on any failure. */
