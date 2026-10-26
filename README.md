@@ -36,7 +36,7 @@ the checks.
 ## Hosted tracker (optional)
 
 [`web/`](web/README.md) is a self-hosted, single-user web app (Cloudflare
-Workers + your own Supabase project) for the same job search: a daily scan of
+Workers + your own Supabase or Neon database) for the same job search: a daily scan of
 the boards you watch (Ashby, Greenhouse, Lever, Workable, Remote.com) scored
 against your own rubric by an LLM, a tailored CV per posting with Word and PDF
 export, drafted application answers, and an application tracker. A first-run

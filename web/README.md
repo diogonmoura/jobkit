@@ -1,8 +1,18 @@
 # jobkit web: hosted job tracker
 
-An optional, self-hosted companion to the jobkit plugin: a single-user web app on **Cloudflare Workers** with data in **your own Supabase project**. It finds jobs on the boards you watch, scores them against your own rubric with an LLM, tailors your CV per posting (Word and PDF export), drafts application answers, and tracks applications.
+An optional, self-hosted companion to the jobkit plugin: a single-user web app on **Cloudflare Workers** with data in **your own database**, either a Supabase project or a Neon Postgres database. It finds jobs on the boards you watch, scores them against your own rubric with an LLM, tailors your CV per posting (Word and PDF export), drafts application answers, and tracks applications.
 
 Everything personal (profile, rubric, watchlist, CV, AI key) lives in your database and is set up in the browser by a first-run wizard at **`/setup`**. Nothing personal is in this code.
+
+## Pick a setup
+
+| # | Hosting | Database | Login | How it's installed |
+|---|---------|----------|-------|--------------------|
+| 1 | Cloudflare Workers | Supabase | Supabase Auth | [Deploy to Cloudflare](#deploy-to-cloudflare), as always |
+| 2 | Vercel | Neon, added through Vercel Storage | Neon Auth | Coming soon: a "Deploy to Vercel" button |
+| 3 | Cloudflare Workers | Neon | Neon Auth | [Cloudflare + Neon](#cloudflare--neon) |
+
+Every feature below works the same on all three, except the Supabase-only extras marked in the [Configuration](#configuration) table. Setup 1 is the default and needs no new configuration. The rest of this page is written for setup 1; setup 3 has its own install section.
 
 ## Features
 
@@ -18,7 +28,7 @@ Everything personal (profile, rubric, watchlist, CV, AI key) lives in your datab
 
 ## Quick start (local)
 
-Requirements: Node 22+ (wrangler 4.151 refuses older versions; `web/.nvmrc` pins 22), a free [Supabase](https://supabase.com) project, an API key for [OpenRouter](https://openrouter.ai/keys) (or OpenAI, or any OpenAI-compatible API).
+Requirements: Node 22+ (wrangler 4.151 refuses older versions; `web/.nvmrc` pins 22), a free [Supabase](https://supabase.com) project (or a Neon database, see [Cloudflare + Neon](#cloudflare--neon)), an API key for [OpenRouter](https://openrouter.ai/keys) (or OpenAI, or any OpenAI-compatible API).
 
 ```bash
 cd web
@@ -34,6 +44,35 @@ Then follow the wizard:
 3. **AI model**: choose OpenRouter (default), OpenAI, Claude (an Anthropic API key from console.anthropic.com; a Claude subscription can't be used) or another OpenAI-compatible endpoint, paste the key, **Test & save**. The key is validated, encrypted with AES-GCM using `SETTINGS_ENC_KEY` and stored in `jobkit_settings`, readable only by the Worker.
 4. **Preferences**: target roles by tier, seniority, focus, keywords, home location and remote rule, right to work, company types to exclude or flag, salary floor, anything else that matters, the scoring weights, companies to watch (names or board links; jobkit finds their public boards), and optionally your Master CV and experience notes.
 5. **Finish**: opens the tracker.
+
+## Cloudflare + Neon
+
+Setup 3 runs on Cloudflare Workers like setup 1, with data in a [Neon](https://neon.tech) Postgres database and sign-in handled by Neon Auth. The Neon free plan includes 1 GB of storage per project and up to 100 projects, with no card needed.
+
+1. **Create the database with Neon Auth on.** Either from Vercel (*Storage → Create Database → Neon*, keep the Auth switch on; the database's quickstart, in the *Neon Auth* tab, shows `DATABASE_URL` and `NEON_AUTH_BASE_URL`), or at [neon.tech](https://neon.tech) with Neon Auth enabled (*Auth* page of the project in the Neon console).
+2. **Configure the Worker.** In `wrangler.jsonc` (or your `wrangler.local.jsonc`) set the vars `JOBKIT_DB` to `postgres` and `NEON_AUTH_BASE_URL` (a public URL, safe to commit). Then add the secrets and deploy:
+
+   ```bash
+   cd web
+   npx wrangler secret put DATABASE_URL           # the Neon connection string
+   npx wrangler secret put SETTINGS_ENC_KEY       # 64 hex chars: openssl rand -hex 32
+   npx wrangler secret put JOBKIT_ENGINE_TOKEN    # optional, for sync web; any long random string
+   npx wrangler secret put SETUP_TOKEN            # optional, see below
+   npm run deploy
+   ```
+
+3. **Trust your site's address.** In the Neon console go to *Settings → Better Auth → Domains* and add the address the app runs on (for example `https://jobkit.example.com` or the `workers.dev` URL). Without it sign-in fails with "Invalid origin". The setup wizard tells you which address to add.
+4. **Run `/setup`.** Open the Worker URL. The database step shows the database host name and a **Prepare database** button that applies the schema; there is nothing to paste. Then create your account and carry on with the same steps as above.
+5. **Switch off sign-up.** After the owner account exists, turn off *Sign-up with Email* in the Neon console (*Settings → Better Auth*), so nobody else can create an account. The app only lets the owner in either way.
+6. **Reset emails (optional).** Password reset works by email through Neon's shared sender. For production, set up a custom email provider in Neon.
+
+Differences from setup 1: `AUTH_MODE=external` (with `LOGIN_URL` and `COOKIE_DOMAIN`) and `LLM_KEY_SOURCE` are not available, and there is no live update between open tabs. The page refreshes its lists when the tab regains focus instead.
+
+`sync web` from the jobkit engine to a Neon setup is coming in a follow-up release. The Worker already serves the endpoints it will use (`/api/engine/*`, authorised with `JOBKIT_ENGINE_TOKEN`), so setting that secret now does no harm.
+
+## Switching setups
+
+Install the new setup from scratch, then run `sync web` from `applications.md` once the engine supports it for your target. jobkit does not move data between setups.
 
 ## Deploy to Cloudflare
 
@@ -58,9 +97,13 @@ Open the Worker URL and complete `/setup`. The cron in `wrangler.jsonc` (`0 7 * 
 
 | Name | Kind | Purpose |
 |------|------|---------|
-| `SUPABASE_URL` | var | Project URL |
-| `SUPABASE_ANON_KEY` | var | Publishable (anon) key; used by the browser, RLS protects rows |
-| `SUPABASE_SERVICE_ROLE_KEY` | secret | Worker-only (scan, setup checks, settings); never sent to the browser |
+| `JOBKIT_DB` | var, optional | `supabase` (default) or `postgres` (Neon, setup 3) |
+| `DATABASE_URL` | secret, `postgres` only | Neon connection string; Worker-only, never sent to the browser |
+| `NEON_AUTH_BASE_URL` | var, `postgres` only | Neon Auth URL (public); the Worker checks sign-in tokens against it |
+| `JOBKIT_ENGINE_TOKEN` | secret, optional | Bearer token for `/api/engine/*`, used by the engine's `sync web` on Neon setups. Any long random string (`openssl rand -hex 32`) |
+| `SUPABASE_URL` | var, Supabase only | Project URL |
+| `SUPABASE_ANON_KEY` | var, Supabase only | Publishable (anon) key; used by the browser, RLS protects rows |
+| `SUPABASE_SERVICE_ROLE_KEY` | secret, Supabase only | Worker-only (scan, setup checks, settings); never sent to the browser |
 | `SETTINGS_ENC_KEY` | secret | Encrypts the AI key saved in `/setup` (`enc:v1:` AES-256-GCM). Do not rotate without re-saving the key |
 | `SETUP_TOKEN` | secret, optional | Required to claim the owner account |
 | `OPENROUTER_API_KEY` | secret, optional | Fallback LLM key when none is saved in `/setup` |
@@ -68,12 +111,12 @@ Open the Worker URL and complete `/setup`. The cron in `wrangler.jsonc` (`0 7 * 
 | `SCAN_CRON_SECRET` | secret, optional | Enables `POST /api/scan/cron` with header `X-Scan-Cron-Secret` for external schedulers |
 | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `ADZUNA_COUNTRY` | secret / var, optional | Adds Adzuna search results for that country (default `gb`) |
 | `SITE_ORIGIN` | var, optional | Public URL, sent as `HTTP-Referer` to OpenRouter |
-| `COOKIE_DOMAIN` | var, optional | Share the auth cookie across subdomains (e.g. `.example.com`) |
+| `COOKIE_DOMAIN` | var, optional, Supabase only | Share the auth cookie across subdomains (e.g. `.example.com`) |
 | `JOBKIT_LANG` | var, optional | UI language and language of AI-written reasons/flags/analysis: `en` (default) or `pt-PT` (European Portuguese). Locales live in `public/locales/` |
 | `LOGO_DEV_TOKEN` | var, optional | [logo.dev](https://www.logo.dev) publishable token (`pk_…`) for company logos on jobs, applications and following. Without it each company shows its initial |
-| `AUTH_MODE`, `LOGIN_URL` | var, optional | `AUTH_MODE=external` sends signed-out visitors to `LOGIN_URL?next=<url>` instead of `/login`, for when another app on the same Supabase project signs users in (set `COOKIE_DOMAIN` so the session cookie is shared) |
+| `AUTH_MODE`, `LOGIN_URL` | var, optional, Supabase only | `AUTH_MODE=external` sends signed-out visitors to `LOGIN_URL?next=<url>` instead of `/login`, for when another app on the same Supabase project signs users in (set `COOKIE_DOMAIN` so the session cookie is shared) |
 | `LOGOUT_URL`, `SETTINGS_URL`, `HOME_URL`, `HOME_LABEL` | var, optional | Where Sign out and Settings go, and an extra nav link (external mode hides Sign out without `LOGOUT_URL`) |
-| `LLM_KEY_SOURCE` | var, optional | `table.column` holding a per-user OpenRouter key another app already stores (plain or `enc:v1:` with the same `SETTINGS_ENC_KEY`); used when no key is saved in `/setup` |
+| `LLM_KEY_SOURCE` | var, optional, Supabase only | `table.column` holding a per-user OpenRouter key another app already stores (plain or `enc:v1:` with the same `SETTINGS_ENC_KEY`); used when no key is saved in `/setup` |
 
 The Preferences tab also has **Scoring guidance** (appended to the scoring rubric) and **Writing rules** (applied to tailored CVs and application answers); `custom_flags` in the profile (`[{ "label": "…", "title": "<regex>" }]`) adds your own checks to matches.
 

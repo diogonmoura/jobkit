@@ -19,3 +19,11 @@ SCAN_CRON_SECRET=
 ADZUNA_APP_ID=
 ADZUNA_APP_KEY=
 ADZUNA_COUNTRY=
+# Cloudflare + Neon (setup 3): leave the SUPABASE_* lines above empty and set these instead.
+# JOBKIT_DB=postgres
+# Neon connection string. Worker-only secret.
+# DATABASE_URL=
+# Neon Auth URL (public), from the database's Neon Auth tab.
+# NEON_AUTH_BASE_URL=
+# Optional: Bearer token for /api/engine/* (any long random string, openssl rand -hex 32).
+# JOBKIT_ENGINE_TOKEN=
