@@ -17,6 +17,9 @@ export interface DbQuery<T = any> extends PromiseLike<DbResult<T>> {
   maybeSingle(): DbQuery<T>;
 }
 
+// What a browser-facing db may do, per table. Task 7 adds the map and enforces it.
+export type BrowserAccess = Record<string, Array<QueryPlan["op"]>>;
+
 export interface Db { from(table: string): DbQuery }
 
 // What a chain records before it runs. `compile` turns it into SQL.
