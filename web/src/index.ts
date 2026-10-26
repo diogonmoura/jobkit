@@ -18,6 +18,8 @@ const PUBLIC_PATHS = new Set([
   "/login.html",
   "/jobkit-tracker.css",
   "/jobkit-theme.js",
+  // Static client code (no secrets) the Postgres wizard loads after sign-in; a redirect here would break its import.
+  "/jobkit-remote-db.js",
   "/setup/jobkit-schema.sql",
 ]);
 

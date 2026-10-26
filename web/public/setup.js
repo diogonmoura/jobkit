@@ -22,7 +22,7 @@ const ORDER = ["db", "account", "llm", "prefs", "done"];
 function doneMap() {
   const s = status;
   const dbOk = PG
-    ? Boolean(s?.supabase.configured && s.db && !s.db.error && s.db.pendingMigrations.length === 0 && s.db.neonAuth.originTrusted && s.encKey)
+    ? Boolean(s?.supabase.configured && s.db && !s.db.error && s.db.pendingMigrations.length === 0 && s.db.neonAuth.reachable && s.db.neonAuth.originTrusted && s.encKey)
     : Boolean(s?.supabase.configured && s.supabase.checks?.schema.ok && s.encKey);
   return { db: dbOk, account: dbOk && s.isOwner, llm: s?.isOwner && s.llm.configured, prefs: s?.isOwner && s.prefsSaved, done: s?.onboarded };
 }
@@ -78,7 +78,7 @@ function renderDbPg() {
     ? checkLi(false, "Configuration", "Set DATABASE_URL and NEON_AUTH_BASE_URL on the Worker, then click Check again")
     : checkLi(!d.error, "Database", d.error || d.host) +
       checkLi(!d.error && d.pendingMigrations.length === 0, "Tables", d.error ? "Unknown" : d.pendingMigrations.length ? `${d.pendingMigrations.length} migration(s) to apply` : "All jobkit tables are present") +
-      checkLi(na.reachable ? na.originTrusted : false, "Neon Auth", !na.reachable ? "Could not reach Neon Auth" : na.originTrusted ? "Reachable, and this site is trusted" : "This site is not trusted yet") +
+      checkLi(na.reachable && na.originTrusted, "Neon Auth", !na.reachable ? "Could not be reached: check NEON_AUTH_BASE_URL" : na.originTrusted ? "Reachable, and this site is trusted" : "This site is not trusted yet") +
       checkLi(status.encKey, "SETTINGS_ENC_KEY", status.encKey ? "Set (encrypts your AI key)" : "Missing: set a 64 character hex string as a Worker secret");
   const origin = $("pg-origin");
   origin.hidden = !(na.reachable && !na.originTrusted);
@@ -199,7 +199,7 @@ document.addEventListener("click", (e) => {
 async function neonAuth(path, body) {
   const res = await fetch("/api/auth" + path, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.message || json.error || "Something went wrong. Try again.");
+  if (!res.ok) { const e = new Error(json.message || json.error || "Something went wrong. Try again."); e.status = res.status; e.code = json.code; throw e; }
   return json;
 }
 async function claim() {
@@ -212,8 +212,12 @@ $("acct-create").addEventListener("click", async () => {
   setStatus("acct-status", "Creating…");
   try {
     if (PG) {
-      await neonAuth("/sign-up/email", { name: email.split("@")[0], email, password });
-      await neonAuth("/sign-in/email", { email, password });
+      // A retry after a failed claim finds the account already there: carry on with sign-in.
+      let existed = false;
+      try { await neonAuth("/sign-up/email", { name: email.split("@")[0], email, password }); }
+      catch (e) { if (!(e.code === "USER_ALREADY_EXISTS" || e.status === 422)) throw e; existed = true; }
+      try { await neonAuth("/sign-in/email", { email, password }); }
+      catch (e) { throw existed ? new Error("This email already has an account and the password did not match. Use \"I already have one: sign in\" with the right password.") : e; }
       await claim(); await refresh(); setStatus("acct-status", ""); toast("Account created"); go("account");
       return;
     }
@@ -377,7 +381,8 @@ $("finish").addEventListener("click", async () => {
 // ---- boot
 (async () => {
   try { await refresh(); } catch (e) { toast("Could not load setup status: " + e.message); return; }
-  if (PG ? doneMap().db : status.supabase.configured && status.supabase.checks?.schema.ok) await ensureClient();
+  // Supabase only: on Postgres the remote client is loaded after sign-in, where it is needed.
+  if (!PG && status.supabase.configured && status.supabase.checks?.schema.ok) { try { await ensureClient(); } catch { /* optional here; used again when needed */ } }
   const want = location.hash.slice(1);
   go(ORDER.includes(want) && canOpen(want) ? want : firstOpen());
 })();

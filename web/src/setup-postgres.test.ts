@@ -142,4 +142,40 @@ describe("setup wizard on Postgres", () => {
     const status = (await (await call("GET", "/setup/status", undefined, { ...baseEnv, SETUP_TOKEN: "s" })).json()) as any;
     assert.equal(status.setupTokenRequired, true);
   });
+
+  it("claim by a second user says why in the error field", async () => {
+    await applyMigrations(run);
+    await deps.db!.from("jobkit_instance").insert({ id: 1, owner_user_id: U1 });
+    signedIn = { userId: U2 };
+    const res = await call("POST", "/setup/claim", {});
+    assert.equal(res.status, 409);
+    assert.equal(((await res.json()) as any).error, "This jobkit already has an owner");
+  });
+
+  it("prepare-db failure does not leak the driver message", async () => {
+    deps.run = async () => {
+      throw new Error("password authentication failed for user neondb_owner");
+    };
+    const real = console.error;
+    console.error = () => {};
+    try {
+      const res = await call("POST", "/setup/prepare-db");
+      const text = await res.text();
+      assert.equal(res.status, 500);
+      assert.ok(!text.includes("neondb_owner"));
+      assert.equal(JSON.parse(text).error, "Could not prepare the database. Check DATABASE_URL.");
+    } finally {
+      console.error = real;
+    }
+  });
+
+  it("status reports Neon Auth unreachable so the wizard can block the database step", async () => {
+    deps.fetch = (async () => {
+      throw new Error("down");
+    }) as any;
+    await applyMigrations(run);
+    const body = (await (await call("GET", "/setup/status")).json()) as any;
+    assert.deepEqual(body.db.pendingMigrations, []);
+    assert.equal(body.db.neonAuth.reachable, false);
+  });
 });

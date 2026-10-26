@@ -41,3 +41,10 @@ test("/api/auth/* goes to Neon Auth on Postgres", async () => {
   }
   assert.deepEqual(seen, ["https://ep-x.neonauth.example.test/neondb/auth/get-session?x=1"]);
 });
+
+test("the Postgres wizard's remote client is served without a session", async () => {
+  const env = { ...pg, ASSETS: { fetch: async () => new Response("export const x = 1;") } } as unknown as Env;
+  const res = await worker.fetch(new Request("https://jobs.example.test/jobkit-remote-db.js"), env);
+  assert.equal(res.status, 200);
+  assert.match(await res.text(), /export/);
+});

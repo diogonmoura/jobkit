@@ -482,7 +482,9 @@ export async function handleSetup(request: Request, env: Env, path: string, deps
     try {
       return jsonResponse({ applied: await applyMigrations(run()) });
     } catch (e) {
-      return jsonResponse({ error: `Could not prepare the database: ${e instanceof Error ? e.message : e}` }, { status: 500 });
+      // The driver's message can name the database user, so it stays in the Worker log.
+      console.error("prepare-db failed", e);
+      return jsonResponse({ error: "Could not prepare the database. Check DATABASE_URL." }, { status: 500 });
     }
   }
 
@@ -491,7 +493,10 @@ export async function handleSetup(request: Request, env: Env, path: string, deps
   const owner = await ownerId();
 
   if (path === "/setup/claim" && request.method === "POST") {
-    if (owner) return jsonResponse({ ok: owner === user.id, owner: true }, { status: owner === user.id ? 200 : 409 }, pending);
+    if (owner) {
+      if (owner === user.id) return jsonResponse({ ok: true, owner: true }, {}, pending);
+      return jsonResponse({ ok: false, owner: true, error: "This jobkit already has an owner" }, { status: 409 }, pending);
+    }
     if (postgres && (await pendingMigrations(run()).catch(() => ["?"])).length) {
       return jsonResponse({ error: "Prepare the database first" }, { status: 412 }, pending);
     }
