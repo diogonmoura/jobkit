@@ -4,11 +4,24 @@ import { POSTGRES_MIGRATIONS } from "./postgres-sql.generated";
 import { TABLES } from "./tables";
 import type { BrowserAccess, Db, DbQuery, DbResult, QueryPlan } from "./types";
 
+// Result shapes follow PostgREST: date and timestamp values stay Postgres text (full microsecond
+// precision, so they compare equal in a later .eq()), bigint and numeric become numbers.
+const asText = (v: string) => v;
+export const TYPE_PARSERS: Record<number, (v: string) => unknown> = {
+  1082: asText,
+  1114: asText,
+  1184: asText,
+  20: Number,
+  1700: Number,
+};
+
 export type SqlRunner = (text: string, values: unknown[]) => Promise<Record<string, unknown>[]>;
 
 // Thin wrapper over Neon's HTTP driver: one statement per call.
 export function neonRunner(databaseUrl: string): SqlRunner {
-  const sql = neon(databaseUrl);
+  const sql = neon(databaseUrl, {
+    types: { getTypeParser: (oid: number) => TYPE_PARSERS[oid] ?? ((v: string) => v) } as any,
+  });
   return async (text, values) => (await sql.query(text, values)) as Record<string, unknown>[];
 }
 
@@ -77,6 +90,7 @@ class Query implements DbQuery {
       ...plan,
       filters: [...plan.filters, { column: "user_id", op: "eq", value: ownerId }],
       rows: plan.rows?.map((r) => ({ ...r, user_id: ownerId })),
+      conflictOwner: plan.op === "upsert" ? ownerId : undefined,
       patch: plan.patch ? { ...plan.patch, user_id: ownerId } : plan.patch,
     };
   }

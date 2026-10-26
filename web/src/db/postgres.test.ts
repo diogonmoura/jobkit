@@ -1,11 +1,13 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { applyMigrations, createPostgresDb, pendingMigrations, type SqlRunner } from "./postgres";
+import { applyMigrations, createPostgresDb, pendingMigrations, TYPE_PARSERS, type SqlRunner } from "./postgres";
 import { POSTGRES_MIGRATIONS } from "./postgres-sql.generated";
 
 const U1 = "00000000-0000-0000-0000-000000000001";
 const U2 = "00000000-0000-0000-0000-000000000002";
+const F1 = "00000000-0000-0000-0000-0000000000f1";
+const F2 = "00000000-0000-0000-0000-0000000000f2";
 
 function runnerFor(pg: PGlite): SqlRunner {
   return async (text, values) => (await pg.query(text, values as any[])).rows as Record<string, unknown>[];
@@ -16,7 +18,7 @@ const app = (id: string, extra: Record<string, unknown> = {}) => ({ id, company:
 let pg: PGlite;
 let run: SqlRunner;
 beforeEach(async () => {
-  pg = new PGlite();
+  pg = new PGlite({ parsers: TYPE_PARSERS });
   run = runnerFor(pg);
   await applyMigrations(run);
 });
@@ -125,6 +127,43 @@ describe("postgres driver", () => {
     assert.equal(again.error?.code, "23505");
     const bad = await db.from("nope").select("id");
     assert.equal(bad.error?.code, "PGRST100");
+  });
+});
+
+describe("owner-scoped upsert", () => {
+  const file = (id: string, user_id: string, content: string) => ({ id, user_id, filename: "f.md", size: 1, content });
+  it("cannot take over another owner's row on a table keyed by id alone", async () => {
+    const raw = createPostgresDb(run, {});
+    const ins = await raw.from("jobkit_experience_files").insert(file(F1, U2, "secret"));
+    assert.equal(ins.error, null);
+    const db = createPostgresDb(run, { ownerId: U1 });
+    const res = await db.from("jobkit_experience_files").upsert(file(F1, U1, "mine"), { onConflict: "id" }).select("id, content, user_id");
+    assert.deepEqual(res.data, []);
+    const after = await raw.from("jobkit_experience_files").select("user_id, content").eq("id", F1).single();
+    assert.deepEqual(after.data, { user_id: U2, content: "secret" });
+  });
+  it("still updates the owner's own row and keeps user_id", async () => {
+    const db = createPostgresDb(run, { ownerId: U1 });
+    await db.from("jobkit_experience_files").insert(file(F2, U1, "v1"));
+    const res = await db.from("jobkit_experience_files").upsert(file(F2, U2, "v2"), { onConflict: "id" }).select("content, user_id");
+    assert.deepEqual(res.data, [{ content: "v2", user_id: U1 }]);
+  });
+});
+
+describe("value shapes", () => {
+  it("keeps timestamps as microsecond text so a conditional update matches", async () => {
+    const db = createPostgresDb(run, {});
+    await db.from("jobkit_apps").insert({ user_id: U1, ...app("a1"), updated_at: "2026-02-01 00:00:00.123456+00" });
+    const row = await db.from("jobkit_apps").select("updated_at, applied").eq("id", "a1").single();
+    assert.equal(typeof row.data.updated_at, "string");
+    assert.match(row.data.updated_at, /\.123456/);
+    assert.equal(row.data.applied, "2026-01-01");
+    const ok = await db.from("jobkit_apps").update({ role: "Z" }).eq("id", "a1").eq("updated_at", row.data.updated_at).select("id");
+    assert.deepEqual(ok.data, [{ id: "a1" }]);
+  });
+  it("returns bigint counts as numbers", async () => {
+    const rows = await run("select 5::bigint as a, 1.5::numeric as b", []);
+    assert.deepEqual(rows, [{ a: 5, b: 1.5 }]);
   });
 });
 

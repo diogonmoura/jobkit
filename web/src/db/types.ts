@@ -32,6 +32,8 @@ export type QueryPlan = {
   rows?: Record<string, unknown>[];
   patch?: Record<string, unknown>;
   onConflict?: string;
+  // Upsert only: the do-update applies just to existing rows owned by this user.
+  conflictOwner?: string;
   returning?: string;
   filters: { column: string; op: "eq" | "in" | "gte"; value: unknown }[];
   order: { column: string; ascending: boolean; nullsFirst?: boolean }[];

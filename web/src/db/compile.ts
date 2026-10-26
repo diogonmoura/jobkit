@@ -74,7 +74,8 @@ export function compile(plan: QueryPlan, tables: Record<string, TableSpec>): Com
       if (!conflict.length) throw new DbCompileError(`upsert on ${plan.table} needs onConflict (no primary key)`);
       const target = conflict.map(col).join(", ");
       const sets = keys.filter((k) => !conflict.includes(k)).map((k) => `${quote(k)} = excluded.${quote(k)}`);
-      text += ` on conflict (${target}) ` + (sets.length ? `do update set ${sets.join(", ")}` : "do nothing");
+      const ownerOnly = plan.conflictOwner !== undefined ? ` where ${table}.${quote("user_id")} = ${param(plan.conflictOwner)}` : "";
+      text += ` on conflict (${target}) ` + (sets.length ? `do update set ${sets.join(", ")}${ownerOnly}` : "do nothing");
     }
     return { text: text + returning(), values };
   }
