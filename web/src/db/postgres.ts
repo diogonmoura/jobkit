@@ -19,10 +19,10 @@ export type SqlRunner = (text: string, values: unknown[]) => Promise<Record<stri
 
 // Thin wrapper over Neon's HTTP driver: one statement per call.
 export function neonRunner(databaseUrl: string): SqlRunner {
-  const sql = neon(databaseUrl, {
-    types: { getTypeParser: (oid: number) => TYPE_PARSERS[oid] ?? ((v: string) => v) } as any,
-  });
-  return async (text, values) => (await sql.query(text, values)) as Record<string, unknown>[];
+  const sql = neon(databaseUrl);
+  // The type parsers must go on each query: neon() ignores `types` in its own options.
+  const types = { getTypeParser: (oid: number) => TYPE_PARSERS[oid] ?? ((v: string) => v) };
+  return async (text, values) => (await sql.query(text, values, { types })) as Record<string, unknown>[];
 }
 
 type Scope = { ownerId?: string; access?: BrowserAccess };

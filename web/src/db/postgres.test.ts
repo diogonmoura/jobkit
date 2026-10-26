@@ -1,7 +1,8 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { applyMigrations, createPostgresDb, pendingMigrations, TYPE_PARSERS, type SqlRunner } from "./postgres";
+import { neonConfig } from "@neondatabase/serverless";
+import { applyMigrations, createPostgresDb, neonRunner, pendingMigrations, TYPE_PARSERS, type SqlRunner } from "./postgres";
 import { POSTGRES_MIGRATIONS } from "./postgres-sql.generated";
 
 const U1 = "00000000-0000-0000-0000-000000000001";
@@ -164,6 +165,31 @@ describe("value shapes", () => {
   it("returns bigint counts as numbers", async () => {
     const rows = await run("select 5::bigint as a, 1.5::numeric as b", []);
     assert.deepEqual(rows, [{ a: 5, b: 1.5 }]);
+  });
+});
+
+describe("neonRunner", () => {
+  it("applies the shared type parsers to the HTTP driver's results", async () => {
+    const original = neonConfig.fetchFunction;
+    neonConfig.fetchFunction = async () =>
+      new Response(
+        JSON.stringify({
+          command: "SELECT",
+          rowCount: 1,
+          fields: [
+            { name: "ts", dataTypeID: 1184 },
+            { name: "n", dataTypeID: 20 },
+          ],
+          rows: [["2026-02-01 00:00:00.123456+00", "5"]],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    try {
+      const rows = await neonRunner("postgres://u:p@example.neon.tech/db")("select 1", []);
+      assert.deepEqual(rows, [{ ts: "2026-02-01 00:00:00.123456+00", n: 5 }]);
+    } finally {
+      neonConfig.fetchFunction = original;
+    }
   });
 });
 
