@@ -1,6 +1,10 @@
 # Daily bridge between your data repo and the hosted tracker (web/), run by GitHub Actions.
-# Copy to .github/workflows/jobkit-daily.yml in your private data repo, set [tracker] backend = "web"
-# and supabase_url in jobkit.toml, and add the SUPABASE_SECRET_KEY repository secret.
+# Copy to .github/workflows/jobkit-daily.yml in your private data repo and set [tracker] backend = "web"
+# in jobkit.toml. Then pick one:
+#   any setup: set web_url in jobkit.toml and add the JOBKIT_ENGINE_TOKEN repository secret
+#     (the same value as the Worker's JOBKIT_ENGINE_TOKEN secret);
+#   Supabase only: set supabase_url in jobkit.toml and add the SUPABASE_SECRET_KEY repository secret.
+# If both are set, web_url wins.
 # It runs before the web app's 07:00 UTC scan, which then scores the postings this sends.
 name: jobkit daily
 
@@ -21,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      JOBKIT_ENGINE_TOKEN: ${{ secrets.JOBKIT_ENGINE_TOKEN }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       # Each machine keeps its own sync snapshot next to applications.md; this names the Action's.
       JOBKIT_MACHINE: github-actions

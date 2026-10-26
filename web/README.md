@@ -68,11 +68,11 @@ Setup 3 runs on Cloudflare Workers like setup 1, with data in a [Neon](https://n
 
 Differences from setup 1: `AUTH_MODE=external` (with `LOGIN_URL` and `COOKIE_DOMAIN`) and `LLM_KEY_SOURCE` are not available, and there is no live update between open tabs. The page refreshes its lists when the tab regains focus instead.
 
-`sync web` from the jobkit engine to a Neon setup is coming in a follow-up release. The Worker already serves the endpoints it will use (`/api/engine/*`, authorised with `JOBKIT_ENGINE_TOKEN`), so setting that secret now does no harm.
+To run `sync web` from the jobkit engine against this setup, set `[tracker] backend = "web"` and `web_url = "https://<your jobkit site>"` in `jobkit.toml`, and give the engine the same value as the Worker's `JOBKIT_ENGINE_TOKEN` secret, in the `JOBKIT_ENGINE_TOKEN` environment variable or in `~/.jobkit/web.env` (never in `jobkit.toml`). The engine talks to the Worker's `/api/engine/*` endpoints.
 
 ## Switching setups
 
-Install the new setup from scratch, then run `sync web` from `applications.md` once the engine supports it for your target. jobkit does not move data between setups.
+Install the new setup from scratch, then run `sync web` from `applications.md` with `web_url` pointing at the new site. jobkit does not move data between setups.
 
 ## Deploy to Cloudflare
 
@@ -100,7 +100,7 @@ Open the Worker URL and complete `/setup`. The cron in `wrangler.jsonc` (`0 7 * 
 | `JOBKIT_DB` | var, optional | `supabase` (default) or `postgres` (Neon, setup 3) |
 | `DATABASE_URL` | secret, `postgres` only | Neon connection string; Worker-only, never sent to the browser |
 | `NEON_AUTH_BASE_URL` | var, `postgres` only | Neon Auth URL (public); the Worker checks sign-in tokens against it |
-| `JOBKIT_ENGINE_TOKEN` | secret, optional | Bearer token for `/api/engine/*`, used by the engine's `sync web` on Neon setups. Any long random string (`openssl rand -hex 32`) |
+| `JOBKIT_ENGINE_TOKEN` | secret, optional | Bearer token for `/api/engine/*`, used by the engine's `sync web` (with `web_url` on the engine side). Any long random string (`openssl rand -hex 32`) |
 | `SUPABASE_URL` | var, Supabase only | Project URL |
 | `SUPABASE_ANON_KEY` | var, Supabase only | Publishable (anon) key; used by the browser, RLS protects rows |
 | `SUPABASE_SERVICE_ROLE_KEY` | secret, Supabase only | Worker-only (scan, setup checks, settings); never sent to the browser |

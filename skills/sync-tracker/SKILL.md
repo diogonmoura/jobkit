@@ -9,7 +9,7 @@ Read `[tracker] backend` in `jobkit.toml` (no `backend` but an `artifact_url` me
 
 ## Hosted web app (`backend = "web"`)
 
-Run `python3 ~/.jobkit/launcher.py sync web` from the data repo and report what it printed: whether `applications.md` changed and how many applications were pushed. On `error: ...` relay the reason (a missing `SUPABASE_SECRET_KEY` or `supabase_url` is the usual one). The rest of this skill is the artifact tracker only.
+Run `python3 ~/.jobkit/launcher.py sync web` from the data repo and report what it printed: whether `applications.md` changed and how many applications were pushed. On `error: ...` relay the reason (a missing `JOBKIT_ENGINE_TOKEN` or `web_url` is the usual one, or on the older setup `SUPABASE_SECRET_KEY` or `supabase_url`). The rest of this skill is the artifact tracker only.
 
 # Artifact tracker
 

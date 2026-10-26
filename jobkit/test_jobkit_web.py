@@ -130,7 +130,7 @@ class TestClient(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(web.WebError) as ctx:
                 web.client_from_config(config)
-        self.assertEqual(str(ctx.exception), "no secret key")
+        self.assertEqual(str(ctx.exception), "no secret key (set SUPABASE_SECRET_KEY)")
 
 
 BASE = "https://app.example.com"
@@ -250,7 +250,7 @@ class TestClientFromConfig(unittest.TestCase):
         config = jobkit_config.Config(web_url=BASE, web_env="/none/x.env")
         with self.assertRaises(web.WebError) as ctx:
             self.pick(config, {})
-        self.assertEqual(str(ctx.exception), "no engine token")
+        self.assertEqual(str(ctx.exception), "no engine token (set JOBKIT_ENGINE_TOKEN)")
 
     def test_supabase_only_gives_client(self):
         config = jobkit_config.Config(supabase_url="https://ref.supabase.co", supabase_env="/none/x.env")

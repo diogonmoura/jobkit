@@ -217,11 +217,11 @@ def client_from_config(config: jobkit_config.Config, timeout: int = 20):
     if config.web_url:
         token = jobkit_config.engine_token(config)
         if not token:
-            raise WebError("no engine token")
+            raise WebError("no engine token (set JOBKIT_ENGINE_TOKEN)")
         return EngineClient(config.web_url, token, timeout=timeout)
     if not config.supabase_url:
         raise WebError("no web_url or supabase_url in jobkit.toml")
     key = jobkit_config.supabase_secret_key(config)
     if not key:
-        raise WebError("no secret key")
+        raise WebError("no secret key (set SUPABASE_SECRET_KEY)")
     return Client(config.supabase_url, key, timeout=timeout)
