@@ -1,7 +1,10 @@
-"""The web app's Supabase, as the engine sees it: applications and postings for its scan.
+"""The web app as the engine sees it: applications and postings for its scan. Stdlib only.
 
-Talks to Supabase's REST API (PostgREST) with the secret key from jobkit_config.supabase_secret_key, which
-bypasses Row Level Security, so every query names the owner's user id itself. Stdlib only.
+Two clients with the same methods. EngineClient talks to the web app's /api/engine endpoints with the engine
+token from jobkit_config.engine_token; it works for any setup, and the token fixes the owner server-side.
+Client talks to Supabase's REST API (PostgREST) directly with the secret key from
+jobkit_config.supabase_secret_key, which bypasses Row Level Security, so every query names the owner's user
+id itself. client_from_config picks one; web_url wins over supabase_url.
 
 Application updates are conditional on the row's updated_at as last read (a trigger moves it on every
 change), so an edit made in the web app between a pull and a push is never overwritten: the update matches
@@ -28,11 +31,23 @@ WEB_ONLY_COLUMNS = ("cv_md", "posting_text", "answers", "job_id")
 
 
 class WebError(Exception):
-    """Any failure talking to the web app's Supabase. The message is a short reason for a warning."""
+    """Any failure talking to the web app, through either client. The message is a short reason for a
+    warning; status is the HTTP status when there was one."""
 
     def __init__(self, message: str, status: Optional[int] = None):
         super().__init__(message)
         self.status = status
+
+
+USER_AGENT = "jobkit-engine/1"
+# Plain http only for a site running on this machine.
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def normalize_target(url: str) -> str:
+    """A site's URL as the sync snapshot records it: scheme, lowercase host and path, no trailing slash."""
+    parts = urllib.parse.urlsplit(str(url).strip())
+    return "{}://{}{}".format(parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"))
 
 
 def _quote(value: str) -> str:
@@ -86,6 +101,19 @@ def _map_apps(rows: List[dict]) -> Tuple[DbDocs, set, Dict[Key, Tuple[str, Optio
     return docs, web_only_keys, hidden_keys
 
 
+def _error_detail(error: urllib.error.HTTPError) -> str:
+    """The server's own reason from an error body, short: the Worker's `error` or PostgREST's `message`."""
+    try:
+        answer = json.loads(error.read().decode("utf-8"))
+    except Exception:  # no body, not JSON, or a body that can't be read: the status alone will do
+        return ""
+    if not isinstance(answer, dict):
+        return ""
+    detail = answer.get("error") or answer.get("message") or ""
+    detail = " ".join(str(detail).split())
+    return detail if len(detail) <= 200 else detail[:197] + "..."
+
+
 class _Http:
     """One JSON request to the web app, with every failure turned into a short WebError."""
 
@@ -93,14 +121,18 @@ class _Http:
         self.opener = opener
         self.timeout = timeout
 
+    def _http_error(self, status: int, detail: str) -> str:
+        return "HTTP {}: {}".format(status, detail) if detail else "HTTP {}".format(status)
+
     def _send(self, method: str, url: str, headers: dict, body=None):
         data = json.dumps(body).encode("utf-8") if body is not None else None
+        headers = dict(headers, **{"User-Agent": USER_AGENT})
         request = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with self.opener(request, timeout=self.timeout) as response:
                 raw = response.read()
         except urllib.error.HTTPError as error:
-            raise WebError("HTTP {}".format(error.code), status=error.code) from None
+            raise WebError(self._http_error(error.code, _error_detail(error)), status=error.code) from None
         except urllib.error.URLError as error:
             raise WebError(str(error.reason)) from None
         except (socket.timeout, TimeoutError):
@@ -119,6 +151,7 @@ class Client(_Http):
     def __init__(self, url: str, key: str, opener=urllib.request.urlopen, timeout: int = 20):
         super().__init__(opener, timeout)
         self.base = url.rstrip("/") + "/rest/v1"
+        self.target = normalize_target(url)
         self.key = key
 
     def _call(self, method: str, path: str, body=None, prefer: str = ""):
@@ -169,7 +202,13 @@ class EngineClient(_Http):
     def __init__(self, url: str, token: str, opener=urllib.request.urlopen, timeout: int = 20):
         super().__init__(opener, timeout)
         self.base = url.rstrip("/") + "/api/engine"
+        self.target = normalize_target(url)
         self.token = token
+
+    def _http_error(self, status: int, detail: str) -> str:
+        if status == 401:
+            return "engine token rejected (check JOBKIT_ENGINE_TOKEN and the Worker's secret)"
+        return super()._http_error(status, detail)
 
     def _call(self, method: str, path: str, body=None):
         headers = {"Authorization": "Bearer " + self.token,
@@ -215,6 +254,10 @@ class EngineClient(_Http):
 def client_from_config(config: jobkit_config.Config, timeout: int = 20):
     """The engine client when the web app's URL is set (it wins), else the Supabase client."""
     if config.web_url:
+        parts = urllib.parse.urlsplit(config.web_url.strip())
+        local = parts.scheme.lower() == "http" and (parts.hostname or "") in LOCAL_HOSTS
+        if parts.scheme.lower() != "https" and not local:
+            raise WebError("web_url must start with https://")
         token = jobkit_config.engine_token(config)
         if not token:
             raise WebError("no engine token (set JOBKIT_ENGINE_TOKEN)")

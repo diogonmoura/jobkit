@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -159,7 +160,9 @@ class TestWebConfig(unittest.TestCase):
 
 class TestEngineToken(unittest.TestCase):
     def setUp(self):
-        self.env_path = os.path.join(tempfile.mkdtemp(), "web.env")
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        self.env_path = os.path.join(folder, "web.env")
         self.config = cfg.Config(web_env=self.env_path)
 
     def write(self, text):

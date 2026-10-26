@@ -63,7 +63,11 @@ If both are set, `web_url` wins. Then:
   `stale` and `stats` sync on their own; offline they warn once and carry on.
   Each machine keeps its own sync snapshot next to `applications.md`
   (`.jobkit-web-sync-<machine>.json`, named by `JOBKIT_MACHINE`,
-  `[tracker] machine`, or the hostname).
+  `[tracker] machine`, or the hostname). The snapshot records which site it
+  was synced with, so after switching setups (pointing `web_url` at a new
+  site) the engine notices and the first sync pushes everything in
+  `applications.md` to the new site and deletes nothing. There is no snapshot
+  file to delete by hand.
 - `watch push-postings` sends current postings from watched boards the web app
   can't read (SuccessFactors, Workday, SmartRecruiters and the rest) to it; its
   daily scan scores them like its own.

@@ -125,6 +125,26 @@ class TestClient(unittest.TestCase):
                 c.owner_id()
             self.assertEqual(str(ctx.exception), reason)
 
+    def test_postgrest_message_is_shown(self):
+        body = b'{"code":"PGRST204","message":"Unknown field: x","details":null}'
+        c, _ = client(urllib.error.HTTPError("u", 400, "x", {}, io.BytesIO(body)))
+        with self.assertRaises(web.WebError) as ctx:
+            c.insert_app(USER, "a", {"x": 1})
+        self.assertEqual((str(ctx.exception), ctx.exception.status), ("HTTP 400: Unknown field: x", 400))
+
+    def test_unreadable_error_body_gives_the_status_alone(self):
+        for fp in (None, io.BytesIO(b"<html>oops</html>"), io.BytesIO(b'["x"]')):
+            c, _ = client(urllib.error.HTTPError("u", 500, "x", {}, fp))
+            with self.assertRaises(web.WebError) as ctx:
+                c.owner_id()
+            self.assertEqual(str(ctx.exception), "HTTP 500")
+
+    def test_sends_user_agent_and_records_target(self):
+        c, opener = client([{"owner_user_id": USER}])
+        c.owner_id()
+        self.assertEqual(opener.requests[0][2]["User-agent"], "jobkit-engine/1")
+        self.assertEqual(web.Client("HTTPS://Ref.Supabase.co/", "k").target, "https://ref.supabase.co")
+
     def test_client_from_config_without_key_raises(self):
         config = jobkit_config.Config(supabase_url="https://ref.supabase.co", supabase_env="/none/x.env")
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -218,7 +238,8 @@ class TestEngineClient(unittest.TestCase):
 
     def test_errors_become_web_error_with_short_reason(self):
         unauthorized = urllib.error.HTTPError("u", 401, "x", {}, io.BytesIO(b'{"error":"unauthorized"}'))
-        for error, reason in ((unauthorized, "HTTP 401"),
+        rejected = "engine token rejected (check JOBKIT_ENGINE_TOKEN and the Worker's secret)"
+        for error, reason in ((unauthorized, rejected),
                               (urllib.error.URLError("nodename nor servname"), "nodename nor servname"),
                               (socket.timeout(), "timed out")):
             c, _ = engine(error)
@@ -229,6 +250,26 @@ class TestEngineClient(unittest.TestCase):
         with self.assertRaises(web.WebError) as ctx:
             c.owner_id()
         self.assertEqual(ctx.exception.status, 401)
+
+    def test_worker_error_is_shown(self):
+        c, _ = engine(urllib.error.HTTPError("u", 400, "x", {}, io.BytesIO(b'{"error":"Unknown field: x"}')))
+        with self.assertRaises(web.WebError) as ctx:
+            c.update_app_if_unchanged(USER, "a", "t1", {"x": 1})
+        self.assertEqual((str(ctx.exception), ctx.exception.status), ("HTTP 400: Unknown field: x", 400))
+
+    def test_long_error_is_cut_short(self):
+        body = json.dumps({"error": "bad\n" + "x" * 500}).encode("utf-8")
+        c, _ = engine(urllib.error.HTTPError("u", 400, "x", {}, io.BytesIO(body)))
+        with self.assertRaises(web.WebError) as ctx:
+            c.pull_apps(USER)
+        self.assertTrue(str(ctx.exception).startswith("HTTP 400: bad xxx"))
+        self.assertLessEqual(len(str(ctx.exception)), len("HTTP 400: ") + 200)
+
+    def test_sends_user_agent_and_records_target(self):
+        c, opener = engine({"ownerId": USER}, url="https://App.Example.com/jobs/")
+        c.owner_id()
+        self.assertEqual(opener.requests[0][2]["User-agent"], "jobkit-engine/1")
+        self.assertEqual(c.target, "https://app.example.com/jobs")
 
     def test_non_json_body_is_unreadable(self):
         c = web.EngineClient(BASE, "tok", opener=lambda r, timeout=None: FakeResponse(b"<html>"))
@@ -261,6 +302,19 @@ class TestClientFromConfig(unittest.TestCase):
                                       supabase_url="https://ref.supabase.co", supabase_env="/none/x.env")
         self.assertIsInstance(self.pick(config, {"JOBKIT_ENGINE_TOKEN": "t", "SUPABASE_SECRET_KEY": "k"}),
                               web.EngineClient)
+
+    def test_plain_http_web_url_is_refused(self):
+        for url in ("http://jobs.example.com", "http://localhost.example.com", "ftp://jobs.example.com",
+                    "jobs.example.com"):
+            config = jobkit_config.Config(web_url=url, web_env="/none/x.env")
+            with self.assertRaises(web.WebError) as ctx:
+                self.pick(config, {"JOBKIT_ENGINE_TOKEN": "t"})
+            self.assertEqual(str(ctx.exception), "web_url must start with https://")
+
+    def test_plain_http_is_fine_on_this_machine(self):
+        for url in ("http://localhost:8787", "http://127.0.0.1:8787/", "http://[::1]:8787", "HTTP://LOCALHOST"):
+            config = jobkit_config.Config(web_url=url, web_env="/none/x.env")
+            self.assertIsInstance(self.pick(config, {"JOBKIT_ENGINE_TOKEN": "t"}), web.EngineClient)
 
     def test_neither_url_raises(self):
         with self.assertRaises(web.WebError) as ctx:

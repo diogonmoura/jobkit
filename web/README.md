@@ -72,7 +72,7 @@ To run `sync web` from the jobkit engine against this setup, set `[tracker] back
 
 ## Switching setups
 
-Install the new setup from scratch, then run `sync web` from `applications.md` with `web_url` pointing at the new site. jobkit does not move data between setups.
+Install the new setup from scratch, then point `web_url` at the new site and run `sync web` from `applications.md`. The engine notices that its sync snapshot belongs to the old site, so the first sync to the new one pushes every application in `applications.md` and deletes nothing; there are no snapshot files to delete by hand. Data that only the old web app holds (tailored CVs, answers, shortlisted jobs) does not move: jobkit does not copy between setups.
 
 ## Deploy to Cloudflare
 

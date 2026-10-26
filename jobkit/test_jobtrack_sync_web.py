@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import datetime
+import io
 import json
 import os
 import shutil
 import tempfile
 import unittest
+import urllib.error
 
+import jobkit_web
 import jobtrack
 import jobtrack_sync as js
 from jobkit_web import WebError
@@ -84,7 +87,7 @@ class FakeWeb:
                 row["updated_at"] = self._tick()
 
 
-class SyncWebTest(unittest.TestCase):
+class SyncWebBase(unittest.TestCase):
     def setUp(self):
         self.t = tempfile.mkdtemp()
         self.md = os.path.join(self.t, "applications.md")
@@ -105,9 +108,6 @@ class SyncWebTest(unittest.TestCase):
         with open(path, encoding="utf-8") as handle:
             return json.load(handle)
 
-    def sync(self, md=None, machine="mac"):
-        return js.sync_web(self.web, USER, md or self.md, self.state_path(machine))
-
     def apps(self, md=None):
         return {a.key: a for a in jobtrack.parse_log(jobtrack.read_log(md or self.md))}
 
@@ -115,6 +115,11 @@ class SyncWebTest(unittest.TestCase):
         text = fn(jobtrack.read_log(self.md))
         with open(self.md, "w", encoding="utf-8") as handle:
             handle.write(text)
+
+
+class SyncWebTest(SyncWebBase):
+    def sync(self, md=None, machine="mac"):
+        return js.sync_web(self.web, USER, md or self.md, self.state_path(machine))
 
     def test_first_sync_seeds_the_web_app_with_role_ids(self):
         result = self.sync()
@@ -276,6 +281,106 @@ class SyncWebTest(unittest.TestCase):
         self.sync(other, machine="github-actions")
         self.assertEqual(self.apps(other)[("Acme", "PM")].status, "rejected")
         self.assertEqual(self.web.rows["acme-pm-2026-09-01"]["status"], "rejected")
+
+
+SITE_A = "https://ref.supabase.co"
+SITE_B = "https://jobs.example.com"
+
+
+class SyncWebTargetTest(SyncWebBase):
+    """The snapshot belongs to the site it was synced with; another site never reads it as a base."""
+
+    def sync(self, target, legacy_target=None):
+        return js.sync_web(self.web, USER, self.md, self.state_path(), target=target, legacy_target=legacy_target)
+
+    def write_legacy_snapshot(self):
+        # The format before targets: records only, as the Supabase client used to leave it.
+        self.sync(SITE_A)
+        records = {k: v for k, v in self.state().items() if k != "target"}
+        with open(self.state_path(), "w", encoding="utf-8") as handle:
+            json.dump(records, handle)
+
+    def test_a_new_empty_site_gets_everything_and_markdown_keeps_it(self):
+        self.sync(SITE_A)
+        self.web = FakeWeb()  # the new site, nothing in it yet
+        result = self.sync(SITE_B)
+        self.assertEqual(sorted(self.apps()), [("Acme", "PM"), ("Beta", "CoS")])
+        self.assertEqual(sorted(self.web.rows), ["acme-pm-2026-09-01", "beta-cos-2026-09-03"])
+        self.assertEqual(result["pushed"], 2)
+
+    def test_same_site_still_reads_a_web_delete_as_a_delete(self):
+        self.sync(SITE_A)
+        del self.web.rows["acme-pm-2026-09-01"]
+        self.sync(SITE_A + "/")
+        self.assertNotIn(("Acme", "PM"), self.apps())
+        self.assertIn(("Beta", "CoS"), self.apps())
+
+    def test_legacy_snapshot_matches_the_supabase_url_it_came_from(self):
+        self.write_legacy_snapshot()
+        del self.web.rows["acme-pm-2026-09-01"]
+        self.sync(SITE_A, legacy_target="HTTPS://REF.supabase.co/")
+        self.assertNotIn(("Acme", "PM"), self.apps())
+
+    def test_legacy_snapshot_is_ignored_for_a_web_url(self):
+        self.write_legacy_snapshot()
+        self.web = FakeWeb()
+        self.sync(SITE_B, legacy_target=SITE_A)
+        self.assertEqual(sorted(self.apps()), [("Acme", "PM"), ("Beta", "CoS")])
+        self.assertEqual(len(self.web.rows), 2)
+
+    def test_snapshot_records_the_site_it_was_synced_with(self):
+        self.write_legacy_snapshot()
+        self.web = FakeWeb()
+        self.sync(SITE_B + "/", legacy_target=SITE_A)
+        state = self.state()
+        self.assertEqual(state["target"], SITE_B)
+        self.assertIn(js.key_str(("Acme", "PM")), state)
+
+
+class SyncWebOverEngineTest(unittest.TestCase):
+    """sync_web against the real EngineClient, with the Worker's answers scripted."""
+
+    def setUp(self):
+        import test_jobkit_web as tw
+
+        self.tw = tw
+        self.t = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.t)
+        self.md = os.path.join(self.t, "applications.md")
+        with open(self.md, "w", encoding="utf-8") as handle:
+            handle.write(MD)
+        self.state_path = os.path.join(self.t, ".jobkit-web-sync-mac.json")
+        acme = js.md_record({a.key: a for a in jobtrack.parse_log(MD)}[("Acme", "PM")])
+        with open(self.state_path, "w", encoding="utf-8") as handle:
+            json.dump({"target": SITE_B, js.key_str(("Acme", "PM")): acme}, handle)
+        self.acme_row = dict(acme, id="acme-pm-2026-09-01", updated_at="2026-10-21T10:00:00+00:00")
+
+    def test_conflict_pulls_again_and_a_taken_id_gets_a_suffix(self):
+        edited = jobtrack.set_status(jobtrack.read_log(self.md), "Acme", "PM", "rejected")
+        with open(self.md, "w", encoding="utf-8") as handle:
+            handle.write(edited)
+        taken = urllib.error.HTTPError("u", 409, "x", {}, io.BytesIO(b'{"error":"exists"}'))
+        opener = self.tw.FakeOpener(
+            {"rows": [self.acme_row]}, {"updated": False},
+            {"rows": [dict(self.acme_row, updated_at="t2")]}, {"updated": True},
+            taken, {"inserted": True})
+        client = jobkit_web.EngineClient(SITE_B, "tok", opener=opener)
+        result = js.sync_web(client, USER, self.md, self.state_path, target=client.target)
+        calls = [(m, u.replace(SITE_B + "/api/engine", "")) for m, u, _, _ in opener.requests]
+        self.assertEqual(calls, [
+            ("GET", "/apps"),
+            ("PATCH", "/apps/acme-pm-2026-09-01?updated_at=2026-10-21T10%3A00%3A00%2B00%3A00"),
+            ("GET", "/apps"),
+            ("PATCH", "/apps/acme-pm-2026-09-01?updated_at=t2"),
+            ("POST", "/apps"),
+            ("POST", "/apps"),
+        ])
+        self.assertEqual(opener.requests[3][3]["status"], "rejected")
+        self.assertEqual(opener.requests[4][3]["id"], "beta-cos-2026-09-03")
+        self.assertEqual(opener.requests[5][3]["id"], "beta-cos-2026-09-03-2")
+        self.assertNotIn("user_id", opener.requests[5][3])
+        self.assertEqual(result["pushed"], 2)
+        self.assertEqual(opener.answers, [])
 
 
 if __name__ == "__main__":
