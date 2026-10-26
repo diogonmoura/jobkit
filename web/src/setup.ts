@@ -1,7 +1,8 @@
 import type { Db } from "./db/types";
-import { getOwnerId, jsonResponse } from "./auth";
-import { neonSessionUser } from "./auth/neon";
+import { getOwnerId, jsonResponse, safeEqual } from "./auth";
+import { neonSessionUser, type NeonUser } from "./auth/neon";
 import { dbConfigured, dbMode, serviceDb } from "./db";
+import { applyMigrations, neonRunner, pendingMigrations, type SqlRunner } from "./db/postgres";
 import { createSupabaseFromRequest } from "./db/supabase";
 import { encryptSecret, loadLlmSettings, PROVIDERS, testLlmKey, type LlmProvider } from "./llm";
 import { loadProfile, normalizeProfile, saveProfile } from "./preferences";
@@ -108,16 +109,65 @@ function encKeyOk(env: Env): boolean {
   }
 }
 
-async function currentUser(request: Request, env: Env) {
+/** Seams for tests; production uses the real Neon session check, database and fetch. */
+export type SetupDeps = {
+  sessionUser?: (request: Request, env: Env) => Promise<NeonUser | null>;
+  db?: Db;
+  run?: SqlRunner;
+  fetch?: typeof fetch;
+};
+
+async function currentUser(request: Request, env: Env, deps: SetupDeps = {}) {
   if (!dbConfigured(env)) return { user: null, supabase: null, pending: [] as never[] };
   if (dbMode(env) === "postgres") {
     // Any signed-in Neon Auth user: the wizard itself decides who may claim or change setup.
-    const u = await neonSessionUser(request, env);
+    const u = await (deps.sessionUser ?? neonSessionUser)(request, env);
     return { user: u ? { id: u.userId, email: u.email } : null, supabase: null, pending: [] as never[] };
   }
   const { supabase, pending } = createSupabaseFromRequest(request, env);
   const { data } = await supabase.auth.getUser();
   return { user: data.user, supabase, pending };
+}
+
+/** Postgres owner: the JOBKIT_OWNER_USER_ID override, else the jobkit_instance row. Null before migrations or an owner. */
+async function postgresOwner(env: Env, db: Db): Promise<string | null> {
+  if (env.JOBKIT_OWNER_USER_ID) return env.JOBKIT_OWNER_USER_ID;
+  try {
+    const { data, error } = await db.from("jobkit_instance").select("owner_user_id").eq("id", 1).maybeSingle();
+    return error || !data?.owner_user_id ? null : String(data.owner_user_id);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Asks Neon Auth whether it accepts this site's origin. A sign-in with an empty body is rejected
+ * for its body (400) when the origin is trusted, and with INVALID_ORIGIN when it is not.
+ */
+export async function probeNeonAuth(env: Env, origin: string, fetchImpl: typeof fetch = fetch): Promise<{ reachable: boolean; originTrusted: boolean; origin: string }> {
+  const base = (env.NEON_AUTH_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  if (!base) return { reachable: false, originTrusted: true, origin };
+  try {
+    const res = await fetchImpl(`${base}/sign-in/email`, {
+      method: "POST",
+      signal: AbortSignal.timeout(5000),
+      headers: { Origin: origin, "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const body = (await res.json().catch(() => null)) as { code?: unknown } | null;
+    return { reachable: true, originTrusted: body?.code !== "INVALID_ORIGIN", origin };
+  } catch {
+    return { reachable: false, originTrusted: true, origin };
+  }
+}
+
+/** Host name of DATABASE_URL and nothing else: never the user, password or path. */
+function databaseHost(env: Env): string {
+  try {
+    return new URL(env.DATABASE_URL ?? "").hostname;
+  } catch {
+    return "";
+  }
 }
 
 /** Slugs to try for a company name on public ATS boards. */
@@ -323,9 +373,55 @@ export function profileFromAnswers(a: WizardAnswers, current: PreferenceProfile)
 }
 
 /** Handles /api/setup/*. Returns null for other paths. */
-export async function handleSetup(request: Request, env: Env, path: string): Promise<Response | null> {
+export async function handleSetup(request: Request, env: Env, path: string, deps: SetupDeps = {}): Promise<Response | null> {
   if (!path.startsWith("/setup/")) return null;
   const configured = dbConfigured(env);
+  const postgres = dbMode(env) === "postgres";
+  const run = (): SqlRunner => deps.run ?? neonRunner(env.DATABASE_URL as string);
+  const ownerId = () => (postgres ? postgresOwner(env, deps.db ?? serviceDb(env)) : getOwnerId(env));
+
+  if (path === "/setup/status" && request.method === "GET" && postgres) {
+    let pendingIds: string[] = [];
+    let dbError = "";
+    if (configured) {
+      try {
+        pendingIds = await pendingMigrations(run());
+      } catch {
+        dbError = "Could not reach the database";
+      }
+    }
+    const schemaOk = configured && !dbError && pendingIds.length === 0;
+    const owner = schemaOk ? await ownerId() : null;
+    const { user } = schemaOk ? await currentUser(request, env, deps) : { user: null };
+    const isOwner = Boolean(user && owner && user.id === owner);
+    let llm: { configured: boolean; provider?: string; model?: string; baseUrl?: string } = { configured: false };
+    let onboarded = false;
+    if (isOwner && user) {
+      const s = await loadLlmSettings(env, user.id);
+      llm = s ? { configured: true, provider: s.provider, model: s.model, baseUrl: s.provider === "custom" ? s.baseUrl : "" } : { configured: false };
+      const prof = await loadProfile(deps.db ?? serviceDb(env), user.id);
+      onboarded = Boolean(prof.onboarded_at);
+    }
+    const origin = new URL(request.url).origin;
+    return jsonResponse({
+      supabase: { configured, url: "", projectRef: "", checks: null },
+      db: {
+        mode: "postgres",
+        host: databaseHost(env),
+        pendingMigrations: pendingIds,
+        ...(dbError ? { error: dbError } : {}),
+        neonAuth: await probeNeonAuth(env, origin, deps.fetch),
+      },
+      encKey: encKeyOk(env),
+      owner: Boolean(owner),
+      signedIn: Boolean(user),
+      email: isOwner ? user?.email ?? "" : "",
+      isOwner,
+      setupTokenRequired: Boolean(env.SETUP_TOKEN) && !owner,
+      llm,
+      onboarded,
+    });
+  }
 
   if (path === "/setup/status" && request.method === "GET") {
     const supa = configured
@@ -366,25 +462,44 @@ export async function handleSetup(request: Request, env: Env, path: string): Pro
     );
   }
 
-  if (path === "/setup/test-supabase" && request.method === "POST") {
+  if (path === "/setup/test-supabase" && request.method === "POST" && !postgres) {
     // Only useful before Supabase is configured: lets the wizard check pasted credentials. Nothing is stored.
     if (configured && (await getOwnerId(env))) return jsonResponse({ error: "Already configured" }, { status: 409 });
     const b = (await request.json().catch(() => ({}))) as { url?: string; anonKey?: string; serviceKey?: string };
     return jsonResponse({ checks: await testSupabase(String(b.url ?? ""), String(b.anonKey ?? ""), String(b.serviceKey ?? "")) });
   }
 
-  if (!configured) return jsonResponse({ error: "Supabase is not configured yet" }, { status: 412 });
-  const { user, pending } = await currentUser(request, env);
+  if (!configured) return jsonResponse({ error: postgres ? "The database is not configured yet" : "Supabase is not configured yet" }, { status: 412 });
+
+  if (path === "/setup/prepare-db" && request.method === "POST" && postgres) {
+    // Migrations are idempotent and hold no data, so anyone may run them until an owner exists.
+    const existing = await ownerId();
+    if (existing) {
+      const { user } = await currentUser(request, env, deps);
+      if (!user) return jsonResponse({ error: "Sign in first" }, { status: 401 });
+      if (user.id !== existing) return jsonResponse({ error: "Only the owner can change setup" }, { status: 403 });
+    }
+    try {
+      return jsonResponse({ applied: await applyMigrations(run()) });
+    } catch (e) {
+      return jsonResponse({ error: `Could not prepare the database: ${e instanceof Error ? e.message : e}` }, { status: 500 });
+    }
+  }
+
+  const { user, pending } = await currentUser(request, env, deps);
   if (!user) return jsonResponse({ error: "Sign in first" }, { status: 401 }, pending);
-  const owner = await getOwnerId(env);
+  const owner = await ownerId();
 
   if (path === "/setup/claim" && request.method === "POST") {
     if (owner) return jsonResponse({ ok: owner === user.id, owner: true }, { status: owner === user.id ? 200 : 409 }, pending);
+    if (postgres && (await pendingMigrations(run()).catch(() => ["?"])).length) {
+      return jsonResponse({ error: "Prepare the database first" }, { status: 412 }, pending);
+    }
     if (env.SETUP_TOKEN) {
       const b = (await request.clone().json().catch(() => ({}))) as { token?: string };
-      if (String(b.token ?? "") !== env.SETUP_TOKEN) return jsonResponse({ error: "Wrong setup token" }, { status: 403 }, pending);
+      if (!safeEqual(String(b.token ?? ""), env.SETUP_TOKEN)) return jsonResponse({ error: "Wrong setup token" }, { status: 403 }, pending);
     }
-    const { error } = await serviceDb(env).from("jobkit_instance").insert({ id: 1, owner_user_id: user.id });
+    const { error } = await (deps.db ?? serviceDb(env)).from("jobkit_instance").insert({ id: 1, owner_user_id: user.id });
     if (error) return jsonResponse({ error: error.message }, { status: 409 }, pending);
     return jsonResponse({ ok: true }, {}, pending);
   }
