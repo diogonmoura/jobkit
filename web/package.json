@@ -9,7 +9,7 @@
     "screenshots": "node scripts/capture-screenshots.mjs",
     "build:docx": "node scripts/build-docx-bundle.mjs",
     "predeploy": "npm run build:docx && npm run build:sql",
-    "test": "tsx --test src/*.test.ts src/scan/*.test.ts",
+    "test": "tsx --test src/*.test.ts src/db/*.test.ts src/scan/*.test.ts",
     "build:sql": "node scripts/build-setup-sql.mjs",
     "predev": "npm run build:sql",
     "typecheck": "tsc --noEmit"
