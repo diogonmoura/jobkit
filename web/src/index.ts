@@ -61,6 +61,8 @@ function configScript(env: Env): string {
   return (
     `window.__JOBKIT_DB=${JSON.stringify({ mode })};` +
     `window.__JOBKIT_SUPABASE=${JSON.stringify(supabase)};` +
+    // The page links the Supabase block carries on setup 1; none of these are secrets.
+    (mode === "postgres" ? `window.__JOBKIT_NAV=${JSON.stringify({ logoutUrl: auth.logoutUrl, settingsUrl: auth.settingsUrl, homeUrl: auth.homeUrl, homeLabel: auth.homeLabel })};` : "") +
     `window.__JOBKIT_LANG=${JSON.stringify(env.JOBKIT_LANG || "en")};` +
     `window.__JOBKIT_LOGO_TOKEN=${JSON.stringify(publishableLogoToken(env))};`
   );

@@ -66,6 +66,8 @@ export async function handleApi(
   }
   const { userId, db, pending } = auth;
 
+  if (path === "/session" && request.method === "GET") return jsonResponse({ userId });
+
   if (path === "/db" && request.method === "POST" && dbMode(env) === "postgres") {
     return handleDbApi(request, env, userId);
   }

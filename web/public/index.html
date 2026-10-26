@@ -1208,15 +1208,23 @@ render();
     db.collection("preferences").onSnapshot(s=>{const doc=s.docs.find(d=>d.id==="preferences");prefProfile=doc?.data()??{};bindPreferencesForm();});
     return;
   }
+  const postgres=window.__JOBKIT_DB?.mode==="postgres";
   const cfg=window.__JOBKIT_SUPABASE;
-  if(!cfg||!cfg.url||!cfg.anonKey){connected=true;toast("Supabase config missing");render();return}
-  const { createBrowserClient }=await import("https://esm.sh/@supabase/ssr@0.6.1");
+  if(!postgres&&(!cfg||!cfg.url||!cfg.anonKey)){connected=true;toast("Supabase config missing");render();return}
   const { createJobkitDb }=await import("/jobkit-db.js");
   // Auth: built-in /login, or an external sign-in page (AUTH_MODE=external) sharing Supabase cookies on COOKIE_DOMAIN.
-  const auth=cfg.auth||{};
-  const client=createBrowserClient(cfg.url,cfg.anonKey,{
-    cookieOptions:{...(auth.cookieDomain?{domain:auth.cookieDomain}:{}),path:"/",sameSite:"lax",secure:location.protocol==="https:"}
-  });
+  // On Postgres the browser talks to /api/db and /api/auth instead, and the page links come from __JOBKIT_NAV.
+  const auth=postgres?(window.__JOBKIT_NAV||{}):(cfg.auth||{});
+  let client;
+  if(postgres){
+    const { createRemoteClient }=await import("/jobkit-remote-db.js");
+    client=createRemoteClient();
+  }else{
+    const { createBrowserClient }=await import("https://esm.sh/@supabase/ssr@0.6.1");
+    client=createBrowserClient(cfg.url,cfg.anonKey,{
+      cookieOptions:{...(auth.cookieDomain?{domain:auth.cookieDomain}:{}),path:"/",sameSite:"lax",secure:location.protocol==="https:"}
+    });
+  }
   const loginHref=()=>auth.external?(auth.loginUrl+(auth.loginUrl.includes("?")?"&":"?")+"next="+encodeURIComponent(location.href)):"/login?next="+encodeURIComponent(location.pathname+location.search);
   const { data: { session } }=await client.auth.getSession();
   if(!session){location.replace(loginHref());return}

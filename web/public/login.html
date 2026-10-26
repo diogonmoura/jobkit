@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/vendor/hub-shell.css" />
   <link rel="stylesheet" href="/jobkit-tracker.css" />
   <link rel="stylesheet" href="/setup.css" />
+  <style>[hidden]{display:none !important}</style>
   <script type="module" src="/jobkit-theme.js"></script>
 </head>
 <body class="mf-page hub-shell page--setup">
@@ -18,14 +19,14 @@
       <h2>Sign in</h2>
       <label class="mf-field"><span>Email</span><input id="email" type="email" autocomplete="username" required /></label>
       <label class="mf-field"><span>Password</span><input id="password" type="password" autocomplete="current-password" required /></label>
+      <label class="mf-field" id="new-password-field" hidden><span>New password</span><input id="new-password" type="password" autocomplete="new-password" minlength="8" /></label>
       <p class="mf-form-error" id="err" hidden></p>
-      <div class="setup-actions"><button class="mf-btn mf-btn--primary" type="submit">Sign in</button><span class="spacer"></span><a class="mf-link" href="/setup">Setup</a></div>
+      <p id="info" hidden></p>
+      <div class="setup-actions"><button class="mf-btn mf-btn--primary" id="submit" type="submit">Sign in</button><span class="spacer"></span><a class="mf-link" id="forgot" href="#" hidden>Forgot password?</a><a class="mf-link" href="/setup">Setup</a></div>
     </form>
   </main>
   <script type="module">
-    const cfg = window.__JOBKIT_SUPABASE;
-    const { createBrowserClient } = await import("https://esm.sh/@supabase/ssr@0.6.1");
-    const sb = createBrowserClient(cfg.url, cfg.anonKey, { cookieOptions: { path: "/", sameSite: "lax", secure: location.protocol === "https:" } });
+    const postgres = window.__JOBKIT_DB?.mode === "postgres";
     const next = new URLSearchParams(location.search).get("next");
     // Resolve against this origin so "//host" and "/\host" (read as "//host") can't leave the site.
     let safeNext = "/";
@@ -33,13 +34,63 @@
       const target = new URL(next || "/", location.origin);
       if (target.origin === location.origin) safeNext = target.pathname + target.search + target.hash;
     } catch {}
-    document.getElementById("login").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const err = document.getElementById("err"); err.hidden = true;
-      const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("email").value.trim(), password: document.getElementById("password").value });
-      if (error) { err.textContent = error.message; err.hidden = false; return; }
-      location.replace(safeNext);
-    });
+    if (postgres) {
+      const form = document.getElementById("login");
+      const $ = (id) => document.getElementById(id);
+      const err = $("err"), info = $("info");
+      const params = new URLSearchParams(location.search);
+      const resetToken = params.get("reset") === "1" ? params.get("token") : null;
+      // mode: "signin" | "request" (asks for a reset link) | "reset" (sets the new password)
+      let mode = resetToken ? "reset" : "signin";
+      const post = async (path, body) => {
+        const res = await fetch("/api/auth" + path, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) });
+        const data = await res.json().catch(() => ({}));
+        return res.ok ? { ok: true, data } : { ok: false, message: data.message || data.error || "Something went wrong. Try again." };
+      };
+      const show = () => {
+        err.hidden = true; info.hidden = true;
+        form.querySelector("h2").textContent = mode === "signin" ? "Sign in" : mode === "request" ? "Reset your password" : "Choose a new password";
+        $("email").closest("label").hidden = mode === "reset";
+        $("email").required = mode !== "reset";
+        $("password").closest("label").hidden = mode !== "signin";
+        $("password").required = mode === "signin";
+        $("new-password-field").hidden = mode !== "reset";
+        $("new-password").required = mode === "reset";
+        $("submit").textContent = mode === "signin" ? "Sign in" : mode === "request" ? "Send reset link" : "Save password";
+        $("forgot").hidden = mode === "reset";
+        $("forgot").textContent = mode === "signin" ? "Forgot password?" : "Back to sign in";
+      };
+      $("forgot").addEventListener("click", (e) => { e.preventDefault(); mode = mode === "signin" ? "request" : "signin"; show(); });
+      if (params.get("error")) { err.textContent = "That reset link is not valid anymore. Ask for a new one."; err.hidden = false; }
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        err.hidden = true; info.hidden = true;
+        let r;
+        if (mode === "signin") {
+          r = await post("/sign-in/email", { email: $("email").value.trim(), password: $("password").value });
+          if (r.ok) { location.replace(safeNext); return; }
+        } else if (mode === "request") {
+          r = await post("/request-password-reset", { email: $("email").value.trim(), redirectTo: location.origin + "/login?reset=1" });
+          if (r.ok) { info.textContent = "If that email has an account, a reset link is on its way."; info.hidden = false; return; }
+        } else {
+          r = await post("/reset-password", { newPassword: $("new-password").value, token: resetToken });
+          if (r.ok) { history.replaceState(null, "", "/login"); mode = "signin"; show(); info.textContent = "Password saved. Sign in with it."; info.hidden = false; return; }
+        }
+        err.textContent = r.message; err.hidden = false;
+      });
+      show();
+    } else {
+      const cfg = window.__JOBKIT_SUPABASE;
+      const { createBrowserClient } = await import("https://esm.sh/@supabase/ssr@0.6.1");
+      const sb = createBrowserClient(cfg.url, cfg.anonKey, { cookieOptions: { path: "/", sameSite: "lax", secure: location.protocol === "https:" } });
+      document.getElementById("login").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const err = document.getElementById("err"); err.hidden = true;
+        const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("email").value.trim(), password: document.getElementById("password").value });
+        if (error) { err.textContent = error.message; err.hidden = false; return; }
+        location.replace(safeNext);
+      });
+    }
   </script>
 </body>
 </html>
