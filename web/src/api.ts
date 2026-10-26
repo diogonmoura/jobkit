@@ -1,7 +1,8 @@
-import { getOwnerId, jsonResponse, requireUser } from "./auth";
+import { getOwnerId, jsonResponse, requireUser, safeEqual } from "./auth";
 import { dbMode, serviceDb, serviceDbOr } from "./db";
 import { proxyNeonAuth } from "./auth/proxy";
 import { handleDbApi } from "./db/api";
+import { handleEngineApi } from "./engine-api";
 import { handleSetup } from "./setup";
 import { completeChat } from "./llm";
 import type { Env, PreferenceProfile } from "./types";
@@ -21,13 +22,6 @@ import { generateJobAnswers } from "./job-answers";
 import { loadExperience } from "./experience";
 import { buildTailorCvMessages } from "../public/jobkit-cv-prompt.js";
 import { estimateSalary, extractPublishedSalary, extractBenefits } from "./salary";
-
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let d = 0;
-  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return d === 0;
-}
 
 export async function handleApi(
   request: Request,
@@ -56,6 +50,10 @@ export async function handleApi(
     const result = await runJobScan(env, admin, ownerId, "cron", null);
     return jsonResponse({ ok: true, ...result });
   }
+
+  // The engine's token, never a browser session.
+  const engineResponse = await handleEngineApi(request, env, path);
+  if (engineResponse) return engineResponse;
 
   const setupResponse = await handleSetup(request, env, path);
   if (setupResponse) return setupResponse;

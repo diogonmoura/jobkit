@@ -59,6 +59,14 @@ export async function getOwnerId(env: Env): Promise<string | null> {
   return data?.owner_user_id ? String(data.owner_user_id) : null;
 }
 
+/** Constant-time string comparison for secrets. */
+export function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
 export function jsonResponse(
   body: unknown,
   init: ResponseInit = {},
