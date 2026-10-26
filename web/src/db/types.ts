@@ -18,7 +18,7 @@ export interface DbQuery<T = any[]> extends PromiseLike<DbResult<T>> {
   maybeSingle(): DbQuery<any>;
 }
 
-// What a browser-facing db may do, per table. Task 7 adds the map and enforces it.
+// What a browser-facing db may do, per table. createPostgresDb rejects anything else with code 42501.
 export type BrowserAccess = Record<string, Array<QueryPlan["op"]>>;
 
 export interface Db { from(table: string): DbQuery }

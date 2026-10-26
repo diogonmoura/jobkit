@@ -1,6 +1,7 @@
 import { getOwnerId, jsonResponse, requireUser } from "./auth";
 import { dbMode, serviceDb, serviceDbOr } from "./db";
 import { proxyNeonAuth } from "./auth/proxy";
+import { handleDbApi } from "./db/api";
 import { handleSetup } from "./setup";
 import { completeChat } from "./llm";
 import type { Env, PreferenceProfile } from "./types";
@@ -64,6 +65,10 @@ export async function handleApi(
     return jsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
   const { userId, db, pending } = auth;
+
+  if (path === "/db" && request.method === "POST" && dbMode(env) === "postgres") {
+    return handleDbApi(request, env, userId);
+  }
 
   try {
     if (path === "/ai/chat" && request.method === "POST") {

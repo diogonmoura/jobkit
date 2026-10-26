@@ -33,6 +33,12 @@ export function createPostgresDb(run: SqlRunner, scope: Scope): Db {
   return { from: (table) => new Query(run, scope, { table, op: "select", filters: [], order: [] }) };
 }
 
+// Runs a finished plan, as received from the browser. conflictOwner is internal: scoped() sets it,
+// so a value that came with the plan is dropped here.
+export function runPlan(run: SqlRunner, scope: Scope, plan: QueryPlan): PromiseLike<DbResult<any>> {
+  return new Query(run, scope, { ...plan, conflictOwner: undefined });
+}
+
 class Query implements DbQuery {
   constructor(private run: SqlRunner, private scope: Scope, private plan: QueryPlan) {}
 
@@ -97,6 +103,10 @@ class Query implements DbQuery {
 
   private async exec(): Promise<DbResult<any>> {
     const plan = this.plan;
+    const { access } = this.scope;
+    if (access && !(Object.hasOwn(access, plan.table) && access[plan.table].includes(plan.op))) {
+      return { data: null, error: { message: `${plan.op} on ${plan.table} is not allowed`, code: "42501" } };
+    }
     try {
       const { text, values } = compile(this.scoped(), TABLES);
       const rows = await this.run(text, values);
