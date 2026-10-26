@@ -25,9 +25,41 @@ describe("proxyNeonAuth", () => {
     const { fetchImpl } = upstream(() => new Response("{}", { status: 200, headers }));
     const res = await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/sign-in/email", { method: "POST" }), env, "/sign-in/email", fetchImpl);
     assert.deepEqual(res.headers.getSetCookie(), [
-      "__Secure-x=1; Path=/; HttpOnly; Secure",
-      "__Secure-y=2; Path=/; HttpOnly; Secure; SameSite=None",
+      "__Secure-x=1; Path=/; HttpOnly; Secure; SameSite=Lax",
+      "__Secure-y=2; Path=/; HttpOnly; Secure; SameSite=Lax",
     ]);
+  });
+
+  it("forces SameSite=Lax whether Neon sent SameSite=None or nothing", async () => {
+    const headers = new Headers();
+    headers.append("Set-Cookie", "a=1; Path=/neondb/auth; SameSite=None; HttpOnly; Secure");
+    headers.append("Set-Cookie", "b=2; HttpOnly; Secure");
+    headers.append("Set-Cookie", "c=3; samesite=strict");
+    const { fetchImpl } = upstream(() => new Response(null, { status: 200, headers }));
+    const res = await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/sign-in/email", { method: "POST" }), env, "/sign-in/email", fetchImpl);
+    assert.deepEqual(res.headers.getSetCookie(), [
+      "a=1; Path=/; HttpOnly; Secure; SameSite=Lax",
+      "b=2; Path=/; HttpOnly; Secure; SameSite=Lax",
+      "c=3; Path=/; SameSite=Lax",
+    ]);
+  });
+
+  it("forwards each endpoint jobkit uses", async () => {
+    for (const path of ["/sign-up/email", "/sign-in/email", "/sign-out", "/get-session", "/token", "/request-password-reset", "/reset-password"]) {
+      const { seen, fetchImpl } = upstream(() => Response.json({}));
+      await proxyNeonAuth(new Request(`https://jobs.example.test/api/auth${path}`, { method: "POST" }), env, path, fetchImpl);
+      assert.equal(seen.request?.url, `${BASE}${path}`);
+    }
+  });
+
+  it("answers 404 for any other endpoint without contacting Neon", async () => {
+    for (const path of ["/admin/list-users", "", "/", "/sign-in/email/", "/sign-in", "/token/x", "/get-session/../admin/list-users"]) {
+      const { seen, fetchImpl } = upstream(() => new Response("unreachable"));
+      const res = await proxyNeonAuth(new Request("https://jobs.example.test/api/auth/admin/list-users"), env, path, fetchImpl);
+      assert.equal(res.status, 404, path);
+      assert.equal(res.headers.get("content-type")?.startsWith("application/json"), true);
+      assert.equal(seen.request, undefined, path);
+    }
   });
 
   it("passes status and body through", async () => {
