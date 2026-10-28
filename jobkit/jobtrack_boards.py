@@ -35,7 +35,7 @@ BROWSER_UA = (
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 jobtrack-watch/1"
 )
 
-VENDORS = ("oracle", "cornerstone", "join", "avature", "bendingspoons", "mantu", "itjobs")
+VENDORS = ("oracle", "cornerstone", "join", "avature", "bendingspoons", "mantu", "itjobs", "eightfold")
 
 # Hosts that can be recognised but must not be scraped. Shown verbatim as the
 # reason a company is not watchable.
@@ -546,6 +546,77 @@ def resolve_itjobs(url: str, page: Optional[str]) -> Optional[Source]:
     return None
 
 
+# --- Eightfold (career sites on the company's own domain, e.g. jobs.vodafone.com) ---
+#
+# Slug: "<host>/<domain>" or "<host>/<domain>/<location>", e.g.
+# "jobs.vodafone.com/vodafone.com/Portugal". The site's own search API pages
+# ten roles at a time, so a large employer (Vodafone has over a thousand open
+# roles) is cheaper to read through the board's location search; the optional
+# third part is passed to it as is. Leave it out to read every role.
+
+EIGHTFOLD_MAX_PAGES = 200
+_EIGHTFOLD_DOMAIN = re.compile(r'"domain":\s*"([a-z0-9.-]+\.[a-z]{2,})"', re.IGNORECASE)
+
+
+def parse_eightfold(payload, slug: str) -> Tuple[List[Posting], int]:
+    host = slug.split("/")[0]
+    data = w._as_dict(w._as_dict(payload).get("data"))
+    total = w._positive_int(data.get("count"), default=0)
+    postings = []
+    for job in w._require_container(data, "positions", "eightfold"):
+        job = w._as_dict(job)
+        job_id = w._job_id(job.get("id"))
+        if not job_id:
+            continue
+        places = [w._as_str(place) for place in w._as_list(job.get("locations"))]
+        if w._as_str(job.get("workLocationOption")).lower().startswith("remote"):
+            places.append("Remote")
+        path = w._as_str(job.get("positionUrl")) or "/careers/job/{}".format(job_id)
+        posted = job.get("postedTs")
+        postings.append(Posting(
+            id=job_id,
+            title=w._as_str(job.get("name")),
+            url="https://{}{}".format(host, path),
+            location="; ".join(p for p in places if p),
+            posted=w._epoch_millis_to_iso(posted * 1000) if isinstance(posted, int) else None,
+        ))
+    return postings, total
+
+
+def fetch_eightfold(source: Source, timeout: int) -> List[Posting]:
+    parts = source.slug.split("/", 2)
+    if len(parts) < 2 or not all(parts):
+        raise AdapterError("eightfold source must be host/domain[/location], got {!r}".format(source.slug))
+    host, domain = parts[0], parts[1]
+    location = parts[2] if len(parts) == 3 else ""
+    postings: List[Posting] = []
+    seen = set()
+    for page in range(EIGHTFOLD_MAX_PAGES):
+        url = "https://{}/api/pcsx/search?{}".format(host, urllib.parse.urlencode(
+            {"domain": domain, "query": "", "location": location, "start": len(seen)}
+        ))
+        batch, total = w._parse_or_raise(parse_eightfold, _json(_request(url, timeout), url), source)
+        batch = [p for p in batch if p.id not in seen]
+        seen.update(p.id for p in batch)
+        postings.extend(batch)
+        if not batch or len(seen) >= total:
+            break
+    return postings
+
+
+def resolve_eightfold(url: str, page: str) -> Optional[Source]:
+    if "eightfold" not in page.lower():
+        return None
+    parsed = urllib.parse.urlparse(url)
+    domain = urllib.parse.parse_qs(parsed.query).get("domain", [""])[0]
+    if not domain:
+        found = _EIGHTFOLD_DOMAIN.search(html.unescape(page))
+        domain = found.group(1) if found else ""
+    if not parsed.netloc or not domain:
+        return None
+    return Source("eightfold", "{}/{}".format(parsed.netloc.lower(), domain.lower()))
+
+
 # --- registry ---------------------------------------------------------------------
 
 FETCHERS: Dict[str, Callable[[Source, int], List[Posting]]] = {
@@ -556,6 +627,7 @@ FETCHERS: Dict[str, Callable[[Source, int], List[Posting]]] = {
     "bendingspoons": fetch_bendingspoons,
     "mantu": fetch_mantu,
     "itjobs": fetch_itjobs,
+    "eightfold": fetch_eightfold,
 }
 
 
@@ -604,7 +676,7 @@ def resolve_from_page(url: str, page: str) -> Optional[Source]:
         source = resolve(url, page)
         if source is not None:
             return source
-    return resolve_itjobs(url, page) or resolve_avature(url, page)
+    return resolve_itjobs(url, page) or resolve_avature(url, page) or resolve_eightfold(url, page)
 
 
 def blocked_reason(url: str) -> Optional[str]:
