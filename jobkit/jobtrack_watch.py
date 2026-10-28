@@ -22,7 +22,7 @@ VENDORS = (
     "greenhouse", "lever", "lever-eu", "ashby", "smartrecruiters", "successfactors",
     "workday", "taleo", "teamtailor",
     # Connectors in jobtrack_boards.py (kept in step by a test):
-    "oracle", "cornerstone", "join", "avature", "bendingspoons", "mantu", "itjobs",
+    "oracle", "cornerstone", "join", "avature", "bendingspoons", "mantu", "itjobs", "eightfold",
 )
 
 WATCH_COLUMNS = ("Company", "Source", "Keywords", "Location", "Added")
@@ -478,6 +478,7 @@ ADAPTERS = {
     "bendingspoons": {"url": None, "parse": None},
     "mantu": {"url": None, "parse": None},
     "itjobs": {"url": None, "parse": None},
+    "eightfold": {"url": None, "parse": None},
 }
 
 SMARTRECRUITERS_MAX = 1000
