@@ -202,7 +202,7 @@ heading, title, entry line and bullet must appear once, in source order.
 `watch add --url URL` detects the board: `greenhouse`, `lever`, `lever-eu`,
 `ashby`, `smartrecruiters`, `successfactors`, `workday`, `taleo` (Business
 Edition), `teamtailor`, `oracle`, `cornerstone`, `join`, `avature`,
-`bendingspoons`, `mantu` and `itjobs`. LinkedIn and sites that block automated
+`bendingspoons`, `mantu`, `itjobs` and `eightfold`. LinkedIn and sites that block automated
 access are refused by name. For anything else, run `/jobkit:build-connector`.
 Current postings are seeded as seen, so only roles posted from now on alert.
 
@@ -213,6 +213,9 @@ location filter. SuccessFactors boards often report `"<City>, <ISO2>"` (e.g.
 `Lisbon, PT`); a leading comma cannot anchor a match because the column is
 comma-separated, so use the bare code (`PT`). RMK-style SuccessFactors boards
 use ISO3 codes (`PRT`), so give such a company its own Location.
+Eightfold boards page ten roles at a time, so for a large employer add the
+board's own location search as a third part of the slug
+(`eightfold:jobs.vodafone.com/vodafone.com/Portugal`).
 
 ### Following companies you applied to
 

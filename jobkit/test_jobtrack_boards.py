@@ -179,6 +179,66 @@ class TestAvature(unittest.TestCase):
         self.assertEqual(str(source), "avature:" + self.SLUG)
 
 
+class TestEightfold(unittest.TestCase):
+    SLUG = "jobs.vodafone.com/vodafone.com"
+    PAYLOAD = {"status": 200, "data": {"count": 3, "positions": [
+        {"id": 563018697251530, "name": "SME AI", "locations": ["LISBOA, Portugal"],
+         "postedTs": 1792368000, "workLocationOption": "hybrid",
+         "positionUrl": "/careers/job/563018697251530"},
+        {"id": 563018697825563, "name": "Voice Core Support North Manager",
+         "locations": ["portugal", "Bucuresti, Romania"], "postedTs": None,
+         "workLocationOption": "remote_local"},
+        {"id": None, "name": "No id"},
+    ]}}
+
+    def test_parses_positions(self):
+        postings, total = b.parse_eightfold(self.PAYLOAD, self.SLUG)
+        self.assertEqual(total, 3)
+        self.assertEqual([p.id for p in postings], ["563018697251530", "563018697825563"])
+        self.assertEqual(postings[0].url, "https://jobs.vodafone.com/careers/job/563018697251530")
+        self.assertEqual(postings[0].location, "LISBOA, Portugal")
+        self.assertEqual(postings[0].posted, "2026-10-19")
+        self.assertEqual(postings[1].url, "https://jobs.vodafone.com/careers/job/563018697825563")
+        self.assertEqual(postings[1].location, "portugal; Bucuresti, Romania; Remote")
+        self.assertIsNone(postings[1].posted)
+
+    def test_fetch_pages_by_offset_and_passes_the_location(self):
+        first = {"data": {"count": 3, "positions": self.PAYLOAD["data"]["positions"][:2]}}
+        second = {"data": {"count": 3, "positions": [{"id": 7, "name": "Strategy Lead"}]}}
+        with mock.patch.object(b, "_request", side_effect=[json.dumps(first), json.dumps(second)]) as get:
+            postings = b.fetch_eightfold(w.Source("eightfold", self.SLUG + "/Portugal"), 5)
+        self.assertEqual([p.id for p in postings], ["563018697251530", "563018697825563", "7"])
+        self.assertIn("domain=vodafone.com", get.call_args_list[0][0][0])
+        self.assertIn("location=Portugal", get.call_args_list[0][0][0])
+        self.assertIn("start=2", get.call_args_list[1][0][0])
+
+    def test_fetch_stops_when_a_page_adds_nothing_new(self):
+        page = json.dumps({"data": {"count": 99, "positions": [{"id": 1, "name": "A"}]}})
+        with mock.patch.object(b, "_request", side_effect=[page, page]) as get:
+            postings = b.fetch_eightfold(w.Source("eightfold", self.SLUG), 5)
+        self.assertEqual(len(postings), 1)
+        self.assertEqual(get.call_count, 2)
+
+    def test_resolves_a_job_link_by_its_domain_parameter(self):
+        source = w._resolve_from_html(
+            '<link href="https://static.vscdn.net/eightfold-font-base.css">',
+            "https://jobs.vodafone.com/careers/job/563018697251530?domain=vodafone.com",
+        )
+        self.assertEqual(str(source), "eightfold:" + self.SLUG)
+
+    def test_resolves_a_job_link_by_the_domain_in_the_page(self):
+        source = w._resolve_from_html(
+            '<div data-nosnippet>{&#34;domain&#34;: &#34;vodafone.com&#34;}</div> eightfold.ai',
+            "https://jobs.vodafone.com/careers/job/563018697251530",
+        )
+        self.assertEqual(str(source), "eightfold:" + self.SLUG)
+
+    def test_a_page_without_a_domain_is_still_named_unsupported(self):
+        with self.assertRaises(w.ResolveError) as caught:
+            w._resolve_from_html("powered by eightfold", "https://jobs.example.com/careers")
+        self.assertIn("Eightfold", str(caught.exception))
+
+
 class TestBendingSpoons(unittest.TestCase):
     PROPS = {"list": [
         {"id": "63c548b3521886004f3daec0", "jobTitle": "Product manager", "status": "active",
