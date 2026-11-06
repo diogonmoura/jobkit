@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 
+import atscheck
 import cvdata
 import cvrender
 
@@ -59,6 +60,37 @@ class TestRender(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TOOLS, "typst and pdftotext are needed (brew install typst poppler)")
+class TestExtraSections(unittest.TestCase):
+    def render_lines(self, section):
+        with open(SAMPLE, encoding="utf-8") as handle:
+            source = handle.read() + "\n" + section
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "cv.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(source)
+            return [line for page in pdf_pages(cvrender.render_file(path)) for line in page]
+
+    def test_three_part_items_render_as_entries(self):
+        lines = self.render_lines("## Certifications\n"
+                                  "- Certified Agilist | Agile Institute | 2022\n"
+                                  "- PMP | PMI | 2019 - 2022\n")
+        start = lines.index("Certified Agilist")
+        self.assertEqual(lines[start:start + 4],
+                         ["Certified Agilist", "Agile Institute | 2022", "PMP", "PMI | 2019 – 2022"])
+
+    def test_any_other_item_keeps_the_section_on_one_line(self):
+        lines = self.render_lines("## Certifications\n- PMP | PMI | 2019\n- First aid\n")
+        self.assertIn("PMP | PMI | 2019, First aid", lines)
+
+    def test_entries_pass_the_ats_check(self):
+        cv = cvdata.load_cv(SAMPLE)
+        cv["sections"].append({"title": "Certifications", "items": ["PMP | PMI | 2019"]})
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf = cvrender.render(cv, os.path.join(tmp, "cv.pdf"))
+            self.assertEqual(atscheck.check_pdf(pdf, cv), [])
+
+
+@unittest.skipUnless(HAVE_TOOLS, "typst and pdftotext are needed (brew install typst poppler)")
 class TestPageBreaks(unittest.TestCase):
     """Headings stay with what they introduce, wherever the page break falls.
 
@@ -73,12 +105,13 @@ class TestPageBreaks(unittest.TestCase):
     def setUp(self):
         self.cv = cvdata.load_cv(SAMPLE)
         self.cv["education"][0]["bullets"] = [{"label": "", "text": "Thesis on operating models"}]
-        self.cv["sections"] = [{"title": "Certifications", "items": ["PMP"]}]
-        self.headings = ["Professional Experience", "Education", "Skills", "Certifications"]
+        self.cv["sections"].append({"title": "Certifications", "items": ["PMP | PMI | 2020"]})
+        self.headings = ["Professional Experience", "Education", "Skills", "Languages", "Certifications"]
         self.titles = [job["title"] for job in self.cv["experience"]]
         self.titles += [school["degree"] for school in self.cv["education"]]
         self.places = [job["company"] + "," for job in self.cv["experience"]]
         self.places += [school["school"] + "," for school in self.cv["education"]]
+        self.places.append("PMI |")
 
     def render_pages(self, profile_lines):
         cv = copy.deepcopy(self.cv)

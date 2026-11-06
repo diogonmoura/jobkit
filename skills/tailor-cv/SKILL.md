@@ -43,6 +43,7 @@ School, Location | Dates
 ```
 
 - The four headings above are fixed (ATS parsers look for them); any other `##` heading becomes an extra section after Skills.
+- An extra section prints its items on one comma-separated line. If every item is `Title | Organisation | Date`, as in `- Certified SAFe Agilist (SA) | Scaled Agile | 2022`, each one prints as its own entry, like Education.
 - Under each `### Title`, the very next line is `Organisation, Location | Dates`. The location is whatever follows the last comma; leave it out with `Organisation | Dates`.
 - Commas inside parentheses stay in one skill: `Low-Code Automation (Power Automate, n8n)`.
 - No tables, `####` headings, numbered lists, images or HTML: the engine rejects them with a line number, because the PDF could not show them ATS-safely.

@@ -81,7 +81,14 @@
   }
 })
 
+// A section whose items are all "Title | Organisation | Date" reads as entries,
+// like Education; any other section is one comma-separated line.
 #for s in cv.sections {
   section(t(s.title))
-  pad(left: indent, par(t(s.items.join(", "))))
+  let parts = s.items.map(item => item.split(" | "))
+  if parts.all(p => p.len() == 3) {
+    for p in parts { entry(p.at(0), p.at(1), p.at(2), ()) }
+  } else {
+    pad(left: indent, par(t(s.items.join(", "))))
+  }
 }
