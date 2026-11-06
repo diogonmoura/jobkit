@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,6 +31,7 @@ WCOL_COMPANY, WCOL_SOURCE, WCOL_KEYWORDS, WCOL_LOCATION, WCOL_ADDED = range(5)
 HEADER_COMPANY = WATCH_COLUMNS[WCOL_COMPANY]
 
 DEFAULT_TIMEOUT = 20
+RETRY_DELAYS = (60, 300)  # seconds before each extra try at boards that could not be reached
 PLACEHOLDER = jobtrack.PLACEHOLDER
 
 def default_watchlist_path() -> str:
@@ -167,6 +169,10 @@ def parse_watchlist(text: str, filename: str = DEFAULT_WATCHLIST_NAME) -> Watchl
 
 class AdapterError(Exception):
     """A source could not be fetched or its payload could not be understood."""
+
+
+class UnreachableError(AdapterError):
+    """A network failure that may pass (DNS, timeout, reset), so worth another try."""
 
 
 @dataclass
@@ -494,7 +500,7 @@ def _get_json(url: str, timeout: int = DEFAULT_TIMEOUT):
     except urllib.error.HTTPError as error:
         raise AdapterError("HTTP {} from {}".format(error.code, url)) from None
     except (urllib.error.URLError, OSError) as error:
-        raise AdapterError("could not reach {}: {}".format(url, error)) from None
+        raise UnreachableError("could not reach {}: {}".format(url, error)) from None
     except ValueError:
         raise AdapterError("response from {} was not JSON".format(url)) from None
 
@@ -507,7 +513,7 @@ def _get_html(url: str, timeout: int = DEFAULT_TIMEOUT, max_bytes: int = 2_000_0
     except urllib.error.HTTPError as error:
         raise AdapterError("HTTP {} from {}".format(error.code, url)) from None
     except (urllib.error.URLError, OSError) as error:
-        raise AdapterError("could not reach {}: {}".format(url, error)) from None
+        raise UnreachableError("could not reach {}: {}".format(url, error)) from None
 
 
 def _fetch_successfactors_postings(source: Source, timeout: int) -> List[Posting]:
@@ -574,7 +580,7 @@ def _post_json(url: str, body: dict, timeout: int = DEFAULT_TIMEOUT):
     except urllib.error.HTTPError as error:
         raise AdapterError("HTTP {} from {}".format(error.code, url)) from None
     except (urllib.error.URLError, OSError) as error:
-        raise AdapterError("could not reach {}: {}".format(url, error)) from None
+        raise UnreachableError("could not reach {}: {}".format(url, error)) from None
     except ValueError:
         raise AdapterError("response from {} was not JSON".format(url)) from None
 
@@ -748,7 +754,7 @@ def _fetch_ashby_postings(source: Source, url: str, timeout: int) -> List[Postin
         except urllib.error.HTTPError as http_error:
             raise AdapterError("HTTP {} from {}".format(http_error.code, ASHBY_BOARD_GRAPHQL)) from None
         except (urllib.error.URLError, OSError) as net_error:
-            raise AdapterError("could not reach {}: {}".format(ASHBY_BOARD_GRAPHQL, net_error)) from None
+            raise UnreachableError("could not reach {}: {}".format(ASHBY_BOARD_GRAPHQL, net_error)) from None
         except ValueError:
             raise AdapterError("response from {} was not JSON".format(ASHBY_BOARD_GRAPHQL)) from None
         return _parse_or_raise(parse_ashby_board, board, source)
@@ -781,7 +787,7 @@ def _post_json(url: str, body: dict, timeout: int):
     except urllib.error.HTTPError as error:
         raise AdapterError("HTTP {} from {}".format(error.code, url)) from None
     except (urllib.error.URLError, OSError) as error:
-        raise AdapterError("could not reach {}: {}".format(url, error)) from None
+        raise UnreachableError("could not reach {}: {}".format(url, error)) from None
     except ValueError:
         raise AdapterError("response from {} was not JSON".format(url)) from None
 
@@ -1403,17 +1409,46 @@ class PollResult:
     seeded: bool = False
 
 
+def _fetch_with_retries(watches: List[Watch], fetch, sleep) -> list:
+    """Each watch's postings, or the error that stopped them, in watch order.
+
+    The morning run often starts while the laptop is still waking, so DNS and
+    timeouts hit whole batches of boards. Only those are tried again, after the
+    full pass, so one wait covers every board that failed.
+    """
+    outcomes: list = [None] * len(watches)
+    pending = list(range(len(watches)))
+    for wait in (0,) + RETRY_DELAYS:
+        if not pending:
+            break
+        if wait:
+            sleep(wait)
+        unreachable = []
+        for index in pending:
+            try:
+                outcomes[index] = fetch(watches[index].source)
+            except UnreachableError as error:
+                outcomes[index] = error
+                unreachable.append(index)
+            except Exception as error:  # one dead source must not stop the rest
+                outcomes[index] = error
+        pending = unreachable
+    return outcomes
+
+
 def poll(
     watchlist: Watchlist,
     state: Dict[str, SourceState],
     today: datetime.date,
     fetch=None,
+    sleep=time.sleep,
 ) -> List[PollResult]:
     """Fetch every source, diff against seen ids, and mutate state in place."""
     fetch = fetch or fetch_postings
     results: List[PollResult] = []
+    outcomes = _fetch_with_retries(watchlist.watches, fetch, sleep)
 
-    for watch in watchlist.watches:
+    for watch, outcome in zip(watchlist.watches, outcomes):
         key = state_key(watch)
         entry = state.setdefault(key, SourceState())
         # Never had a successful poll -- capture this BEFORE it gets
@@ -1427,15 +1462,14 @@ def poll(
         never_polled = entry.last_ok is None
         result = PollResult(company=watch.company, source=watch.source)
 
-        try:
-            postings = fetch(watch.source)
-        except Exception as error:  # one dead source must not stop the rest
+        if isinstance(outcome, Exception):
             entry.consecutive_failures += 1
-            entry.last_error = str(error)
-            result.error = str(error)
+            entry.last_error = str(outcome)
+            result.error = str(outcome)
             results.append(result)
             continue
 
+        postings = outcome
         entry.consecutive_failures = 0
         entry.last_error = None
         entry.last_ok = today.isoformat()

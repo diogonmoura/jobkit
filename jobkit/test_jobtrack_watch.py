@@ -1039,6 +1039,74 @@ class TestMatching(unittest.TestCase):
         ))
 
 
+class TestPollRetries(unittest.TestCase):
+    TODAY = datetime.date(2026, 8, 4)
+
+    def _poll(self, watches, fetch, state=None):
+        waits = []
+        wl = jobtrack_watch.Watchlist(defaults=jobtrack_watch.Filters(include=[], exclude=[]), watches=watches)
+        state = {} if state is None else state
+        results = jobtrack_watch.poll(wl, state, self.TODAY, fetch=fetch, sleep=waits.append)
+        return results, state, waits
+
+    def test_an_unreachable_board_recovers_on_retry_without_counting_a_failure(self):
+        calls = []
+
+        def fetch(source):
+            calls.append(str(source))
+            if len(calls) == 1:
+                raise jobtrack_watch.UnreachableError("could not reach x: timed out")
+            return [_posting("1", "Head of Strategy")]
+
+        results, state, waits = self._poll([_watch()], fetch)
+        self.assertIsNone(results[0].error)
+        self.assertEqual(state["ashby:acme"].consecutive_failures, 0)
+        self.assertEqual(state["ashby:acme"].last_ok, self.TODAY.isoformat())
+        self.assertEqual(waits, [jobtrack_watch.RETRY_DELAYS[0]])
+
+    def test_a_board_still_unreachable_after_every_try_counts_one_failure(self):
+        calls = []
+
+        def fetch(source):
+            calls.append(str(source))
+            raise jobtrack_watch.UnreachableError("could not reach x: timed out")
+
+        results, state, waits = self._poll([_watch()], fetch)
+        self.assertEqual(results[0].error, "could not reach x: timed out")
+        self.assertEqual(state["ashby:acme"].consecutive_failures, 1)
+        self.assertEqual(len(calls), 1 + len(jobtrack_watch.RETRY_DELAYS))
+        self.assertEqual(waits, list(jobtrack_watch.RETRY_DELAYS))
+
+    def test_other_errors_are_not_retried(self):
+        calls = []
+
+        def fetch(source):
+            calls.append(str(source))
+            raise jobtrack_watch.AdapterError("HTTP 404 from x")
+
+        results, _, waits = self._poll([_watch()], fetch)
+        self.assertEqual(results[0].error, "HTTP 404 from x")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(waits, [])
+
+    def test_one_wait_covers_every_unreachable_board_and_order_is_kept(self):
+        first = _watch()
+        second = _watch(company="Beta", slug="beta")
+        third = _watch(company="Gamma", slug="gamma")
+        calls = []
+
+        def fetch(source):
+            calls.append(str(source))
+            if str(source) != "ashby:beta" and calls.count(str(source)) == 1:
+                raise jobtrack_watch.UnreachableError("could not reach x")
+            return []
+
+        results, _, waits = self._poll([first, second, third], fetch)
+        self.assertEqual([r.company for r in results], [first.company, "Beta", "Gamma"])
+        self.assertEqual(calls, ["ashby:acme", "ashby:beta", "ashby:gamma", "ashby:acme", "ashby:gamma"])
+        self.assertEqual(waits, [jobtrack_watch.RETRY_DELAYS[0]])
+
+
 class TestPoll(unittest.TestCase):
     TODAY = datetime.date(2026, 8, 4)
 

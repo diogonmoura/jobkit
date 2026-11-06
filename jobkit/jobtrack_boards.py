@@ -28,7 +28,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import jobkit_paths
 import jobtrack_watch as w
-from jobtrack_watch import AdapterError, Posting, Source
+from jobtrack_watch import AdapterError, Posting, Source, UnreachableError
 
 BROWSER_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -58,7 +58,7 @@ def _request(url: str, timeout: int, data: Optional[bytes] = None,
     except urllib.error.HTTPError as error:
         raise AdapterError("HTTP {} from {}".format(error.code, url)) from None
     except (urllib.error.URLError, OSError) as error:
-        raise AdapterError("could not reach {}: {}".format(url, error)) from None
+        raise UnreachableError("could not reach {}: {}".format(url, error)) from None
 
 
 def _json(text: str, url: str):
