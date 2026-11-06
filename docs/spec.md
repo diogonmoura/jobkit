@@ -150,7 +150,7 @@ education:
 skills:
   Strategy: [Corporate strategy, M&A, PMO]
   Tools: [Power BI, n8n]
-sections:                         # optional extra sections, rendered in order
+sections:                         # optional extra sections, in order after Skills; Certifications goes before Skills
   - title: Languages
     items: [Portuguese (native), English (fluent)]
 ```

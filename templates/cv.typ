@@ -24,15 +24,17 @@
 #let t(s) = s.replace("'", "’")
 #let dashed(s) = t(s).replace(" - ", " – ")
 
+// sticky keeps a block on the same page as whatever follows it, so a heading
+// can never end a page with its content starting on the next one.
 #let section(title) = block(
-  width: 100%, above: 13pt, below: 6pt, inset: (bottom: 2.5pt), stroke: (bottom: 0.4pt),
+  width: 100%, above: 13pt, below: 6pt, inset: (bottom: 2.5pt), stroke: (bottom: 0.4pt), sticky: true,
   text(size: 12pt, smallcaps(title)),
 )
 
 #let place-of(org, location) = if location != "" { org + ", " + location } else { org }
 
 #let entry(title, place, dates, bullets) = pad(left: indent, block(above: 11pt, below: 0pt, {
-  block(below: 3pt, sticky: true, {
+  block(below: 3pt, sticky: true, breakable: false, {
     text(weight: "bold", t(title))
     linebreak()
     emph(t(place) + " | " + dashed(dates))
@@ -67,10 +69,28 @@
   entry(job.title, place-of(job.company, job.location), job.dates, job.bullets)
 }
 
+// A section whose items are all "Title | Organisation | Date" reads as entries,
+// like Education; any other section is one comma-separated line.
+#let extra-section(s) = {
+  section(t(s.title))
+  let parts = s.items.map(item => item.split(" | "))
+  if parts.all(p => p.len() == 3) {
+    for p in parts { entry(p.at(0), p.at(1), p.at(2), ()) }
+  } else {
+    pad(left: indent, par(t(s.items.join(", "))))
+  }
+}
+
+// Certifications sit with Education; other extra sections follow Skills.
+// expected() in atscheck.py mirrors this order.
+#let is-certifications(s) = lower(s.title) == "certifications"
+
 #section("Education")
 #for s in cv.education {
   entry(s.degree, place-of(s.school, s.location), s.dates, s.bullets)
 }
+
+#for s in cv.sections.filter(is-certifications) { extra-section(s) }
 
 #section("Skills")
 #pad(left: indent, {
@@ -79,7 +99,4 @@
   }
 })
 
-#for s in cv.sections {
-  section(t(s.title))
-  pad(left: indent, par(t(s.items.join(", "))))
-}
+#for s in cv.sections.filter(s => not is-certifications(s)) { extra-section(s) }
