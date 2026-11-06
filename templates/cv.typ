@@ -24,15 +24,17 @@
 #let t(s) = s.replace("'", "’")
 #let dashed(s) = t(s).replace(" - ", " – ")
 
+// sticky keeps a block on the same page as whatever follows it, so a heading
+// can never end a page with its content starting on the next one.
 #let section(title) = block(
-  width: 100%, above: 13pt, below: 6pt, inset: (bottom: 2.5pt), stroke: (bottom: 0.4pt),
+  width: 100%, above: 13pt, below: 6pt, inset: (bottom: 2.5pt), stroke: (bottom: 0.4pt), sticky: true,
   text(size: 12pt, smallcaps(title)),
 )
 
 #let place-of(org, location) = if location != "" { org + ", " + location } else { org }
 
 #let entry(title, place, dates, bullets) = pad(left: indent, block(above: 11pt, below: 0pt, {
-  block(below: 3pt, sticky: true, {
+  block(below: 3pt, sticky: true, breakable: false, {
     text(weight: "bold", t(title))
     linebreak()
     emph(t(place) + " | " + dashed(dates))
