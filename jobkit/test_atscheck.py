@@ -63,6 +63,13 @@ class TestCheckText(unittest.TestCase):
         problems = atscheck.check_text(GOOD + "Beta | 2016 – 2021\n", CV)
         self.assertIn("duplicated: 'Beta | 2016 - 2021'", problems)
 
+    def test_certifications_are_expected_before_skills(self):
+        cv = dict(CV, sections=[{"title": "Languages", "items": ["English"]},
+                                {"title": "CERTIFICATIONS", "items": ["PMP"]}])
+        order = [snippet for snippet, _ in atscheck.expected(cv)]
+        positions = [order.index(title) for title in ("Education", "CERTIFICATIONS", "Skills", "Languages")]
+        self.assertEqual(positions, sorted(positions))
+
     def test_missing_tool_message(self):
         with self.assertRaises(atscheck.AtsError) as ctx:
             atscheck.extract_text("x.pdf", pdftotext="pdftotext-not-installed")

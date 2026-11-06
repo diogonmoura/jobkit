@@ -171,7 +171,8 @@ University of Porto, Porto | 2013 - 2015
 ```
 
 - "Professional Profile", "Professional Experience", "Education" and "Skills"
-  are fixed headings. Any other `##` heading becomes an extra section after Skills.
+  are fixed headings. Any other `##` heading becomes an extra section after Skills,
+  except `## Certifications`, which goes between Education and Skills.
 - The line under each `### Title` is `Organisation, Location | Dates`; the
   location is whatever follows the last comma (`Organisation | Dates` for none).
 - Commas inside parentheses stay in one skill item.

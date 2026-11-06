@@ -41,6 +41,10 @@ def _bullet(bullet: Dict[str, str]) -> str:
     return "{}: {}".format(bullet["label"], bullet["text"]) if bullet["label"] else bullet["text"]
 
 
+def _is_certifications(section: Dict[str, Any]) -> bool:
+    return section["title"].lower() == "certifications"
+
+
 def expected(cv: Dict[str, Any]) -> List[Tuple[str, bool]]:
     items: List[Tuple[str, bool]] = [
         (cv["contact"]["name"], False),
@@ -57,9 +61,10 @@ def expected(cv: Dict[str, Any]) -> List[Tuple[str, bool]]:
         items.append((school["degree"], False))
         items.append((_place(school["school"], school["location"]) + " | " + school["dates"], True))
         items.extend((_lead(_bullet(b)), False) for b in school["bullets"])
+    items.extend((section["title"], False) for section in cv["sections"] if _is_certifications(section))
     items.append(("Skills", False))
     items.extend((skill["category"] + ":", False) for skill in cv["skills"])
-    items.extend((section["title"], False) for section in cv["sections"])
+    items.extend((section["title"], False) for section in cv["sections"] if not _is_certifications(section))
     return items
 
 

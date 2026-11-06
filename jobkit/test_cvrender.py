@@ -82,6 +82,11 @@ class TestExtraSections(unittest.TestCase):
         lines = self.render_lines("## Certifications\n- PMP | PMI | 2019\n- First aid\n")
         self.assertIn("PMP | PMI | 2019, First aid", lines)
 
+    def test_certifications_come_before_skills_and_other_sections_after(self):
+        lines = [line.lower() for line in self.render_lines("## certifications\n- PMP\n")]
+        positions = [lines.index(title) for title in ("education", "certifications", "skills", "languages")]
+        self.assertEqual(positions, sorted(positions), msg=lines)
+
     def test_entries_pass_the_ats_check(self):
         cv = cvdata.load_cv(SAMPLE)
         cv["sections"].append({"title": "Certifications", "items": ["PMP | PMI | 2019"]})
@@ -111,7 +116,7 @@ class TestPageBreaks(unittest.TestCase):
         self.titles += [school["degree"] for school in self.cv["education"]]
         self.places = [job["company"] + "," for job in self.cv["experience"]]
         self.places += [school["school"] + "," for school in self.cv["education"]]
-        self.places.append("PMI |")
+        self.dates_lines = self.places + ["PMI |"]
 
     def render_pages(self, profile_lines):
         cv = copy.deepcopy(self.cv)
@@ -129,7 +134,7 @@ class TestPageBreaks(unittest.TestCase):
             self.assertNotIn(last, self.titles, msg="entry title alone at the page end")
             self.assertFalse(last.startswith(tuple(self.places)), msg="entry without its bullets: " + last)
         for page in pages[1:]:
-            self.assertFalse(page[0].startswith(tuple(self.places)),
+            self.assertFalse(page[0].startswith(tuple(self.dates_lines)),
                              msg="dates line split from its title: " + page[0])
 
     def test_no_heading_left_at_the_end_of_a_page(self):

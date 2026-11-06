@@ -69,21 +69,9 @@
   entry(job.title, place-of(job.company, job.location), job.dates, job.bullets)
 }
 
-#section("Education")
-#for s in cv.education {
-  entry(s.degree, place-of(s.school, s.location), s.dates, s.bullets)
-}
-
-#section("Skills")
-#pad(left: indent, {
-  for s in cv.skills {
-    par(text(weight: "bold", t(s.category) + ":") + " " + t(s.items.join(", ")))
-  }
-})
-
 // A section whose items are all "Title | Organisation | Date" reads as entries,
 // like Education; any other section is one comma-separated line.
-#for s in cv.sections {
+#let extra-section(s) = {
   section(t(s.title))
   let parts = s.items.map(item => item.split(" | "))
   if parts.all(p => p.len() == 3) {
@@ -92,3 +80,23 @@
     pad(left: indent, par(t(s.items.join(", "))))
   }
 }
+
+// Certifications sit with Education; other extra sections follow Skills.
+// expected() in atscheck.py mirrors this order.
+#let is-certifications(s) = lower(s.title) == "certifications"
+
+#section("Education")
+#for s in cv.education {
+  entry(s.degree, place-of(s.school, s.location), s.dates, s.bullets)
+}
+
+#for s in cv.sections.filter(is-certifications) { extra-section(s) }
+
+#section("Skills")
+#pad(left: indent, {
+  for s in cv.skills {
+    par(text(weight: "bold", t(s.category) + ":") + " " + t(s.items.join(", ")))
+  }
+})
+
+#for s in cv.sections.filter(s => not is-certifications(s)) { extra-section(s) }

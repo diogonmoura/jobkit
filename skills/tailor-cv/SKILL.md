@@ -42,7 +42,7 @@ School, Location | Dates
 - item
 ```
 
-- The four headings above are fixed (ATS parsers look for them); any other `##` heading becomes an extra section after Skills.
+- The four headings above are fixed (ATS parsers look for them); any other `##` heading becomes an extra section after Skills. The exception is `## Certifications` (any case), which goes after Education and before Skills.
 - An extra section prints its items on one comma-separated line. If every item is `Title | Organisation | Date`, as in `- Certified SAFe Agilist (SA) | Scaled Agile | 2022`, each one prints as its own entry, like Education.
 - Under each `### Title`, the very next line is `Organisation, Location | Dates`. The location is whatever follows the last comma; leave it out with `Organisation | Dates`.
 - Commas inside parentheses stay in one skill: `Low-Code Automation (Power Automate, n8n)`.
