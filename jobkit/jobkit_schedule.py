@@ -5,6 +5,7 @@ import os
 import platform
 import shlex
 import subprocess
+import sys
 from typing import Optional
 from xml.sax.saxutils import escape
 
@@ -21,7 +22,10 @@ def log_path(root: str) -> str:
 
 
 def plist_text(root: str, launcher: str = jobkit_launcher.LAUNCHER_PATH,
-               python: str = "/usr/bin/python3", hour: int = 8, minute: int = 30) -> str:
+               python: Optional[str] = None, hour: int = 8, minute: int = 30) -> str:
+    # The Python running this, not /usr/bin/python3: macOS's own is built on an
+    # old LibreSSL that some boards refuse at the TLS handshake.
+    python = python or sys.executable or "/usr/bin/python3"
     log = escape(log_path(root))
     return """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

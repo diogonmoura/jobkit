@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import sys
 import tempfile
 import unittest
 
@@ -11,7 +12,8 @@ import jobkit_schedule as sched
 class TestPlist(unittest.TestCase):
     def test_runs_launcher_with_jobkit_home(self):
         # Review Focus 5: the poll must find the data repo through JOBKIT_HOME.
-        text = sched.plist_text("/Users/x/My CV & Jobs", launcher="/Users/x/.jobkit/launcher.py")
+        text = sched.plist_text("/Users/x/My CV & Jobs", launcher="/Users/x/.jobkit/launcher.py",
+                                python="/usr/bin/python3")
         data = plistlib.loads(text.encode("utf-8"))
         self.assertEqual(data["Label"], "com.jobkit.watch")
         self.assertEqual(data["ProgramArguments"],
@@ -20,6 +22,11 @@ class TestPlist(unittest.TestCase):
         self.assertEqual(data["WorkingDirectory"], "/Users/x/My CV & Jobs")
         self.assertEqual(data["StartCalendarInterval"], {"Hour": 8, "Minute": 30})
         self.assertEqual(data["StandardOutPath"], "/Users/x/My CV & Jobs/.jobkit-watch.log")
+
+    def test_defaults_to_the_python_running_jobkit(self):
+        # /usr/bin/python3 on macOS has an old LibreSSL that some boards refuse.
+        data = plistlib.loads(sched.plist_text("/Users/x/cv").encode("utf-8"))
+        self.assertEqual(data["ProgramArguments"][0], sys.executable)
 
     def test_keeps_legacy_log_name(self):
         with tempfile.TemporaryDirectory() as tmp:
