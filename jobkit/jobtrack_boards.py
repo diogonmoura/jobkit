@@ -437,7 +437,7 @@ def _mantu_search_config(timeout: int) -> Tuple[str, str, str]:
         raise AdapterError("mantu: could not find the site's script bundle")
     script = _request(bundle.group(1), timeout, max_bytes=10_000_000)
     found = re.search(
-        r'indexName:"([^"]+)",searchClient:\w+\("(https://[^"]+)","([0-9a-f]+)"', script
+        r'indexName:"([^"]+)",searchClient:\w+\("(https://[^"]+)","([^"]+)"', script
     )
     if not found:
         raise AdapterError("mantu: could not find the search settings in the site's script")

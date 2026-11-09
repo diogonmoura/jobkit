@@ -285,6 +285,14 @@ class TestMantu(unittest.TestCase):
         with mock.patch.object(b, "_request", side_effect=pages):
             self.assertEqual(b._mantu_search_config(5), ("https://search.example", "abc123", "prod_index"))
 
+    def test_reads_a_search_key_that_is_not_plain_hex(self):
+        pages = [
+            '<script src="https://careers.mantu.com/build/assets/app-1.js"></script>',
+            'x=Ml({indexName:"prod_index",searchClient:hs("https://search.example","Mokk3a7f-X_9",{})})',
+        ]
+        with mock.patch.object(b, "_request", side_effect=pages):
+            self.assertEqual(b._mantu_search_config(5)[1], "Mokk3a7f-X_9")
+
     def test_resolves_a_job_link(self):
         source = w.resolve_url("https://careers.mantu.com/brands/mantu/jobs/45456", fetch=False)
         self.assertEqual(str(source), "mantu:mantu")
