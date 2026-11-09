@@ -377,3 +377,40 @@ URL_RESOLVERS = [resolve_acme]
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestThriveApply(unittest.TestCase):
+    SLUG = "teleperformance.thriveapp.ly"
+    PAYLOAD = {"job_listings": [
+        {"id": 577, "job_title": "Vice President, Global Procurement - Non-IT Category",
+         "location": "ES", "city": None, "country": "Spain", "published": True,
+         "published_date": "2026-11-06T15:34:17.527Z"},
+        {"id": 550, "job_title": "Director, Training & Quality - BFSI ", "location": "Taguig, PH",
+         "city": "Taguig", "country": "Philippines", "published": True,
+         "published_date": "2026-10-07T20:46:31.082Z"},
+        {"id": 1, "job_title": "Unpublished", "country": "Spain", "published": False},
+    ]}
+
+    def test_parses_published_roles(self):
+        postings = b.parse_thriveapply(self.PAYLOAD, self.SLUG)
+        self.assertEqual([p.id for p in postings], ["577", "550"])
+        self.assertEqual(postings[0].url, "https://teleperformance.thriveapp.ly/job/577")
+        self.assertEqual(postings[0].location, "Spain")
+        self.assertEqual(postings[1].location, "Taguig, Philippines")
+        self.assertEqual(postings[1].title, "Director, Training & Quality - BFSI")
+        self.assertEqual(postings[0].posted, "2026-11-06T15:34:17.527Z")
+
+    def test_fetch_reads_the_listing_endpoint(self):
+        with mock.patch.object(b, "_request", return_value=json.dumps(self.PAYLOAD)) as request:
+            postings = b.fetch_thriveapply(w.Source("thriveapply", self.SLUG), 5)
+        self.assertEqual(request.call_args[0][0], "https://teleperformance.thriveapp.ly/api/v1/job_listings")
+        self.assertEqual(len(postings), 2)
+
+    def test_a_payload_without_listings_is_an_adapter_error(self):
+        with mock.patch.object(b, "_request", return_value="{}"):
+            with self.assertRaises(w.AdapterError):
+                b.fetch_thriveapply(w.Source("thriveapply", self.SLUG), 5)
+
+    def test_resolves_a_job_link(self):
+        source = w.resolve_url("https://teleperformance.thriveapp.ly/job/576", fetch=False)
+        self.assertEqual(str(source), "thriveapply:" + self.SLUG)

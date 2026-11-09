@@ -24,6 +24,7 @@ VENDORS = (
     "workday", "taleo", "teamtailor",
     # Connectors in jobtrack_boards.py (kept in step by a test):
     "oracle", "cornerstone", "join", "avature", "bendingspoons", "mantu", "itjobs", "eightfold",
+    "thriveapply",
 )
 
 WATCH_COLUMNS = ("Company", "Source", "Keywords", "Location", "Added")
@@ -485,6 +486,7 @@ ADAPTERS = {
     "mantu": {"url": None, "parse": None},
     "itjobs": {"url": None, "parse": None},
     "eightfold": {"url": None, "parse": None},
+    "thriveapply": {"url": None, "parse": None},
 }
 
 SMARTRECRUITERS_MAX = 1000

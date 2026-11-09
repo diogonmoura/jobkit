@@ -35,7 +35,7 @@ BROWSER_UA = (
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 jobtrack-watch/1"
 )
 
-VENDORS = ("oracle", "cornerstone", "join", "avature", "bendingspoons", "mantu", "itjobs", "eightfold")
+VENDORS = ("oracle", "cornerstone", "join", "avature", "bendingspoons", "mantu", "itjobs", "eightfold", "thriveapply")
 
 # Hosts that can be recognised but must not be scraped. Shown verbatim as the
 # reason a company is not watchable.
@@ -617,6 +617,41 @@ def resolve_eightfold(url: str, page: str) -> Optional[Source]:
     return Source("eightfold", "{}/{}".format(parsed.netloc.lower(), domain.lower()))
 
 
+# --- ThriveApply (Thrive TRM's candidate site, <company>.thriveapp.ly) ----------
+#
+# Slug: the board's host, e.g. "teleperformance.thriveapp.ly". The single-page
+# app reads every open role from one public JSON endpoint, unpaged.
+
+def parse_thriveapply(payload, slug: str) -> List[Posting]:
+    postings = []
+    for job in w._require_container(w._as_dict(payload), "job_listings", "thriveapply"):
+        job = w._as_dict(job)
+        job_id = w._job_id(job.get("id"))
+        if not job_id or job.get("published") is False:
+            continue
+        city, country = w._as_str(job.get("city")), w._as_str(job.get("country"))
+        location = ", ".join(p for p in (city, country) if p) or w._as_str(job.get("location"))
+        postings.append(Posting(
+            id=job_id,
+            title=w._as_str(job.get("job_title")).strip(),
+            url="https://{}/job/{}".format(slug, job_id),
+            location=location,
+            posted=w._as_str(job.get("published_date")) or None,
+        ))
+    return postings
+
+
+def fetch_thriveapply(source: Source, timeout: int) -> List[Posting]:
+    url = "https://{}/api/v1/job_listings".format(source.slug)
+    payload = _json(_request(url, timeout, headers={"Accept": "application/json"}), url)
+    return w._parse_or_raise(parse_thriveapply, payload, source)
+
+
+def resolve_thriveapply(url: str) -> Optional[Source]:
+    host = urllib.parse.urlparse(url).netloc.lower()
+    return Source("thriveapply", host) if host.endswith(".thriveapp.ly") else None
+
+
 # --- registry ---------------------------------------------------------------------
 
 FETCHERS: Dict[str, Callable[[Source, int], List[Posting]]] = {
@@ -628,6 +663,7 @@ FETCHERS: Dict[str, Callable[[Source, int], List[Posting]]] = {
     "mantu": fetch_mantu,
     "itjobs": fetch_itjobs,
     "eightfold": fetch_eightfold,
+    "thriveapply": fetch_thriveapply,
 }
 
 
@@ -663,7 +699,8 @@ def load_local_connectors(root: Optional[str] = None) -> List[str]:
 def resolve_from_url(url: str) -> Optional[Source]:
     """Boards recognisable from the URL alone, without fetching it."""
     for resolve in list(_LOCAL_URL_RESOLVERS) + [resolve_oracle, resolve_cornerstone, resolve_join,
-                                                 resolve_bendingspoons, resolve_mantu]:
+                                                 resolve_bendingspoons, resolve_mantu,
+                                                 resolve_thriveapply]:
         source = resolve(url)
         if source is not None:
             return source
