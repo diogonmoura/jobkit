@@ -35,7 +35,7 @@ BROWSER_UA = (
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 jobtrack-watch/1"
 )
 
-VENDORS = ("oracle", "cornerstone", "join", "avature", "bendingspoons", "mantu", "itjobs", "eightfold", "thriveapply")
+VENDORS = ("oracle", "cornerstone", "join", "avature", "bendingspoons", "mantu", "itjobs", "eightfold", "thriveapply", "deel")
 
 # Hosts that can be recognised but must not be scraped. Shown verbatim as the
 # reason a company is not watchable.
@@ -652,6 +652,71 @@ def resolve_thriveapply(url: str) -> Optional[Source]:
     return Source("thriveapply", host) if host.endswith(".thriveapp.ly") else None
 
 
+# --- Deel (www.deel.com/careers) --------------------------------------------------
+#
+# Slug: "www.deel.com". Deel's own Next.js site embeds every open role in the
+# careers page's React Server Components payload (self.__next_f.push chunks),
+# under its "product.career-job-listing" block. Its Ashby job board is not
+# public, so the page is the only structured source.
+
+DEEL_HOST = "www.deel.com"
+_DEEL_CHUNK = re.compile(r'self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)')
+_DEEL_LISTING = '"__component":"product.career-job-listing","jobs":'
+
+
+def _deel_jobs(page: str) -> list:
+    chunks = []
+    for raw in _DEEL_CHUNK.findall(page):
+        try:
+            chunks.append(json.loads('"' + raw + '"'))
+        except ValueError:
+            continue
+    flight = "".join(chunks)
+    start = flight.find(_DEEL_LISTING)
+    if start < 0:
+        raise AdapterError("deel: careers page has no job list")
+    try:
+        jobs, _ = json.JSONDecoder().raw_decode(flight, start + len(_DEEL_LISTING))
+    except ValueError:
+        raise AdapterError("deel: careers page job list was not JSON") from None
+    return {"jobs": jobs}
+
+
+def parse_deel(payload, slug: str) -> List[Posting]:
+    postings = []
+    for job in w._require_container(w._as_dict(payload), "jobs", "deel"):
+        job = w._as_dict(w._as_dict(job).get("attributes"))
+        job_id = w._as_str(job.get("ashby_id"))
+        if not job_id or job.get("is_listed") is False:
+            continue
+        places = [w._as_str(p) for p in w._as_list(job.get("all_locations"))]
+        location = "; ".join(p for p in places if p) or w._as_str(job.get("location_name"))
+        posted = w._as_str(job.get("ashby_published_date"))
+        postings.append(Posting(
+            id=job_id,
+            title=w._as_str(job.get("title")).strip(),
+            url="https://{}/careers/job/{}/".format(slug, job_id),
+            location=location,
+            posted=posted[:10] or None,
+        ))
+    return postings
+
+
+def fetch_deel(source: Source, timeout: int) -> List[Posting]:
+    url = "https://{}/careers/".format(source.slug)
+    return w._parse_or_raise(parse_deel, _deel_jobs(_request(url, timeout)), source)
+
+
+def resolve_deel(url: str) -> Optional[Source]:
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.netloc.lower()
+    if host == "jobs.deel.com" and parsed.path.lower().startswith("/deel"):
+        return Source("deel", DEEL_HOST)
+    if host in ("deel.com", DEEL_HOST) and parsed.path.lower().startswith("/careers"):
+        return Source("deel", DEEL_HOST)
+    return None
+
+
 # --- registry ---------------------------------------------------------------------
 
 FETCHERS: Dict[str, Callable[[Source, int], List[Posting]]] = {
@@ -664,6 +729,7 @@ FETCHERS: Dict[str, Callable[[Source, int], List[Posting]]] = {
     "itjobs": fetch_itjobs,
     "eightfold": fetch_eightfold,
     "thriveapply": fetch_thriveapply,
+    "deel": fetch_deel,
 }
 
 
@@ -700,7 +766,7 @@ def resolve_from_url(url: str) -> Optional[Source]:
     """Boards recognisable from the URL alone, without fetching it."""
     for resolve in list(_LOCAL_URL_RESOLVERS) + [resolve_oracle, resolve_cornerstone, resolve_join,
                                                  resolve_bendingspoons, resolve_mantu,
-                                                 resolve_thriveapply]:
+                                                 resolve_thriveapply, resolve_deel]:
         source = resolve(url)
         if source is not None:
             return source
