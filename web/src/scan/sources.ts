@@ -130,6 +130,7 @@ export async function fetchAshby(target: ScanTarget): Promise<RawOpening[]> {
           title: String(job.title ?? ""),
           url: String(job.jobUrl ?? ""),
           location: ashbyLocation(job),
+          locationText: ashbyLocationText(job),
           description: ashbyDescription(job),
           source: "scan",
           vendor: "ashby",
@@ -142,9 +143,29 @@ export async function fetchAshby(target: ScanTarget): Promise<RawOpening[]> {
   }
 }
 
-function ashbyLocation(job: Record<string, unknown>): string {
-  const loc = String(job.location ?? "");
-  return job.isRemote === true && !/remote|remoto/i.test(loc) ? `${loc} (Remote)`.trim() : loc;
+const ashbyRemote = (job: Record<string, unknown>) => job.isRemote === true || String(job.workplaceType ?? "").toLowerCase() === "remote";
+const withRemote = (loc: string, remote: boolean) => (remote && !/remote|remoto/i.test(loc) ? `${loc} (Remote)`.trim() : loc);
+
+/** Displayed location: the primary place only, so cards stay short. */
+export function ashbyLocation(job: Record<string, unknown>): string {
+  return withRemote(String(job.location ?? job.locationName ?? ""), ashbyRemote(job));
+}
+
+/**
+ * Every place an Ashby posting lists, for location matching only. Boards like n8n file each role under
+ * "Berlin Office" and name Portugal only in secondaryLocations, so matching on the primary misses them.
+ * JSON API items: { location, address: { postalAddress: { addressCountry } } }; GraphQL items: { locationName }.
+ */
+export function ashbyLocationText(job: Record<string, unknown>): string {
+  const places: string[] = [String(job.location ?? job.locationName ?? "")];
+  const secondary = Array.isArray(job.secondaryLocations) ? job.secondaryLocations : [];
+  for (const item of secondary as Record<string, unknown>[]) {
+    if (!item || typeof item !== "object") continue;
+    const addr = (item.address as { postalAddress?: { addressCountry?: unknown } } | undefined)?.postalAddress;
+    places.push(String(item.location ?? item.locationName ?? ""), String(addr?.addressCountry ?? ""));
+  }
+  const unique = [...new Set(places.map((x) => x.trim()).filter(Boolean))];
+  return withRemote(unique.join(" / "), ashbyRemote(job));
 }
 
 /** Ashby keeps the pay band outside the description; put it at the top so salary parsing and scoring see it. */
@@ -232,7 +253,7 @@ export async function fetchRemoteCom(target: ScanTarget): Promise<RawOpening[]> 
 
 async function fetchAshbyGraphql(target: ScanTarget): Promise<RawOpening[]> {
   const query =
-    "query ApiJobBoardWithTeams($organizationHostedJobsPageName: String!) { jobBoard: jobBoardWithTeams(organizationHostedJobsPageName: $organizationHostedJobsPageName) { jobPostings { id title locationName } } }";
+    "query ApiJobBoardWithTeams($organizationHostedJobsPageName: String!) { jobBoard: jobBoardWithTeams(organizationHostedJobsPageName: $organizationHostedJobsPageName) { jobPostings { id title locationName workplaceType secondaryLocations { locationName } } } }";
   const res = await fetch(
     "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams",
     {
@@ -259,7 +280,8 @@ async function fetchAshbyGraphql(target: ScanTarget): Promise<RawOpening[]> {
         company: target.company,
         title: String(job.title ?? ""),
         url: `https://jobs.ashbyhq.com/${target.slug}/${id}`,
-        location: String(job.locationName ?? ""),
+        location: ashbyLocation(job),
+        locationText: ashbyLocationText(job),
         description: "",
         source: "scan",
         vendor: "ashby",

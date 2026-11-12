@@ -123,6 +123,8 @@ export type RawOpening = {
   title: string;
   url: string;
   location: string;
+  /** Match-only location text: the displayed location plus any other places the posting lists (e.g. Ashby secondaryLocations). */
+  locationText?: string;
   description: string;
   source: string;
   vendor?: string;
