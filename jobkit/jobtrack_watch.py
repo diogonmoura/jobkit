@@ -183,6 +183,15 @@ class Posting:
     url: str
     location: str
     posted: Optional[str]
+    # More place names a Location filter should also see (an Ashby role's
+    # secondary locations, "Remote"). Kept out of `location`, which alerts
+    # show, so a role open in 27 countries still reads "Berlin Office".
+    other_locations: str = ""
+
+    @property
+    def location_text(self) -> str:
+        """Everything a Location filter matches against."""
+        return "; ".join(part for part in (self.location, self.other_locations) if part)
 
 
 def _epoch_millis_to_iso(value) -> Optional[str]:
@@ -311,6 +320,31 @@ def parse_lever(payload) -> List[Posting]:
     return postings
 
 
+def _ashby_other_locations(job: dict, name_key: str) -> str:
+    """Secondary location names, address countries and "Remote" for one Ashby job.
+
+    Ashby lists one primary location ("Berlin Office") and puts every other
+    place a role is open in under secondaryLocations, so a filter on the
+    primary alone misses a role that is also open in Portugal. Remote-ness
+    lives in workplaceType / isRemote, not in the location name.
+    """
+    places = []
+
+    def add(name) -> None:
+        name = _as_str(name).strip()
+        if name and name not in places:
+            places.append(name)
+
+    add(_as_dict(_as_dict(job.get("address")).get("postalAddress")).get("addressCountry"))
+    for item in _as_list(job.get("secondaryLocations")):
+        item = _as_dict(item)
+        add(item.get(name_key))
+        add(_as_dict(_as_dict(item.get("address")).get("postalAddress")).get("addressCountry"))
+    if job.get("workplaceType") == "Remote" or job.get("isRemote") is True:
+        add("Remote")
+    return "; ".join(places)
+
+
 def parse_ashby(payload) -> List[Posting]:
     postings = []
     for job in _require_container(payload, "jobs", "ashby"):
@@ -325,6 +359,7 @@ def parse_ashby(payload) -> List[Posting]:
                 url=_as_str(job.get("jobUrl")),
                 location=_as_str(job.get("location")),
                 posted=job.get("publishedAt"),
+                other_locations=_ashby_other_locations(job, "location"),
             )
         )
     return postings
@@ -702,7 +737,8 @@ ASHBY_BOARD_GRAPHQL = "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBo
 ASHBY_BOARD_QUERY = (
     "query ApiJobBoardWithTeams($organizationHostedJobsPageName: String!) { "
     "jobBoard: jobBoardWithTeams(organizationHostedJobsPageName: $organizationHostedJobsPageName) "
-    "{ jobPostings { id title locationName } } }"
+    "{ jobPostings { id title locationName workplaceType "
+    "secondaryLocations { locationName } } } }"
 )
 
 
@@ -724,6 +760,7 @@ def parse_ashby_board(payload, slug: str) -> List[Posting]:
                 url="https://jobs.ashbyhq.com/{}/{}".format(slug, job_id),
                 location=_as_str(job.get("locationName")),
                 posted=None,
+                other_locations=_ashby_other_locations(job, "locationName"),
             )
         )
     return postings
@@ -1394,7 +1431,7 @@ def push_postings(watchlist: Watchlist, client, user_id: str, fetch=None,
             errors.append("{}: {}".format(entry.company, error))
             continue
         for p in postings:
-            if matches(p.title, f.include, f.exclude, p.location, f.location):
+            if matches(p.title, f.include, f.exclude, p.location_text, f.location):
                 rows.append({"external_key": "{}:{}".format(entry.source, p.id), "company": entry.company,
                              "title": p.title, "url": p.url, "location": p.location or "", "description": "",
                              "source": str(entry.source)})
@@ -1485,7 +1522,7 @@ def poll(
         else:
             result.new = [
                 p for p in fresh
-                if matches(p.title, active.include, active.exclude, p.location, active.location)
+                if matches(p.title, active.include, active.exclude, p.location_text, active.location)
             ]
 
         # every posting seen this run is recorded, matched or not
