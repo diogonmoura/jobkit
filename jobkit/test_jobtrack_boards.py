@@ -178,6 +178,32 @@ class TestAvature(unittest.TestCase):
         )
         self.assertEqual(str(source), "avature:" + self.SLUG)
 
+    def test_fetch_passes_the_board_filter_on_every_page(self):
+        pages = [AVATURE_PAGE, ""]
+        source = w.Source("avature", self.SLUG + "/29454=964546")
+        with mock.patch.object(b, "_request", side_effect=pages) as get:
+            postings = b.fetch_avature(source, 5, sleep=lambda s: None)
+        self.assertEqual(len(postings), 2)
+        urls = [call[0][0] for call in get.call_args_list]
+        self.assertEqual(urls[0], "https://jobs.siemens-energy.com/en_US/jobs/Jobs?29454=964546&folderOffset=0")
+        self.assertEqual(urls[1], "https://jobs.siemens-energy.com/en_US/jobs/Jobs?29454=964546&folderOffset=20")
+
+    def test_parses_with_a_filtered_slug(self):
+        postings = b.parse_avature(AVATURE_PAGE, self.SLUG + "/29454=964546")
+        self.assertEqual(postings[0].url,
+                         "https://jobs.siemens-energy.com/en_US/jobs/FolderDetail/Strategy-Manager/304648")
+
+    def test_resolve_keeps_the_search_filter_from_the_url(self):
+        source = w._resolve_from_html(
+            '<link href="/portal/avature.css">',
+            "https://jobs.siemens-energy.com/en_US/jobs/Jobs?29454=964546&folderOffset=20",
+        )
+        self.assertEqual(str(source), "avature:" + self.SLUG + "/29454=964546")
+
+    def test_rejects_a_malformed_slug(self):
+        with self.assertRaises(b.AdapterError):
+            b.parse_avature("", "jobs.siemens-energy.com/en_US")
+
 
 class TestEightfold(unittest.TestCase):
     SLUG = "jobs.vodafone.com/vodafone.com"

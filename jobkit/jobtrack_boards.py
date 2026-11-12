@@ -313,10 +313,13 @@ def resolve_join(url: str) -> Optional[Source]:
 
 # --- Avature (company career portals, e.g. jobs.siemens-energy.com) ----------------
 #
-# Slug: "<host>/<locale>/<portal>", e.g. "jobs.siemens-energy.com/en_US/jobs".
-# The portal's job list is server-rendered, 20 roles a page, paged by
-# folderOffset. It shows no location (that loads per role on click), so every
-# Avature posting has an unknown location and passes the location filter.
+# Slug: "<host>/<locale>/<portal>" or "<host>/<locale>/<portal>/<filter>", e.g.
+# "jobs.siemens-energy.com/en_US/jobs/29454=964546". The portal's job list is
+# server-rendered, 20 roles a page, paged by folderOffset. It shows no location
+# (that loads per role on click), so every Avature posting has an unknown
+# location and passes the location filter. The optional filter is the portal's
+# own search query (numeric field ids, e.g. 29454=964546 is Country = Portugal
+# on Siemens Energy), so the board itself narrows the list before it is read.
 
 AVATURE_PAGE_SIZE = 20
 AVATURE_MAX_PAGES = 250
@@ -327,8 +330,18 @@ _AVATURE_ROLE = re.compile(
 )
 
 
+def _avature_parts(slug: str) -> List[str]:
+    """host, locale, portal and the filter query ("" when the slug has none)."""
+    parts = slug.split("/")
+    if len(parts) == 3:
+        parts.append("")
+    if len(parts) != 4 or not all(parts[:3]):
+        raise AdapterError("avature source must be host/locale/portal[/filter], got {!r}".format(slug))
+    return parts
+
+
 def parse_avature(page: str, slug: str) -> List[Posting]:
-    host, locale, portal = _parts(slug, 3, "avature", "host/locale/portal")
+    host, locale, portal, _ = _avature_parts(slug)
     postings, seen = [], set()
     for found in _AVATURE_ROLE.finditer(page):
         job_id, title = found.group(1), _text(found.group(2))
@@ -348,13 +361,15 @@ def parse_avature(page: str, slug: str) -> List[Posting]:
 
 
 def fetch_avature(source: Source, timeout: int, sleep: Callable[[float], None] = time.sleep) -> List[Posting]:
-    host, locale, portal = _parts(source.slug, 3, "avature", "host/locale/portal")
+    host, locale, portal, query = _avature_parts(source.slug)
     postings: List[Posting] = []
     seen = set()
     for number in range(AVATURE_MAX_PAGES):
         if number:
             sleep(AVATURE_PAGE_DELAY)
-        url = "https://{}/{}/{}/Jobs?folderOffset={}".format(host, locale, portal, number * AVATURE_PAGE_SIZE)
+        url = "https://{}/{}/{}/Jobs?{}folderOffset={}".format(
+            host, locale, portal, query + "&" if query else "", number * AVATURE_PAGE_SIZE
+        )
         batch = w._parse_or_raise(parse_avature, _request(url, timeout), source)
         fresh = [p for p in batch if p.id not in seen]
         seen.update(p.id for p in fresh)
@@ -372,7 +387,12 @@ def resolve_avature(url: str, page: str) -> Optional[Source]:
     segments = [s for s in parsed.path.split("/") if s]
     if len(segments) < 2 or not re.match(r"^[a-z]{2}_[A-Z]{2}$", segments[0]):
         return None
-    return Source("avature", "{}/{}/{}".format(parsed.netloc.lower(), segments[0], segments[1].lower()))
+    slug = "{}/{}/{}".format(parsed.netloc.lower(), segments[0], segments[1].lower())
+    # Keep the portal's search filters (numeric field ids), not paging or role ids.
+    filters = [(k, v) for k, v in urllib.parse.parse_qsl(parsed.query) if k.isdigit() and v]
+    if filters:
+        slug += "/" + urllib.parse.urlencode(filters)
+    return Source("avature", slug)
 
 
 # --- Bending Spoons (jobs.bendingspoons.com) --------------------------------------
