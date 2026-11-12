@@ -422,3 +422,58 @@ class TestThriveApply(unittest.TestCase):
     def test_resolves_a_job_link(self):
         source = w.resolve_url("https://teleperformance.thriveapp.ly/job/576", fetch=False)
         self.assertEqual(str(source), "thriveapply:" + self.SLUG)
+
+
+class TestDeel(unittest.TestCase):
+    JOBS = [
+        {"id": 0, "attributes": {
+            "ashby_id": "adeab841-9916-4c21-973f-733f2d3377d2", "title": "Senior Director, Operations",
+            "location_name": "United Kingdom", "is_listed": True,
+            "ashby_published_date": "2026-07-24T10:32:32.792Z",
+            "compensation_tier_summary": "$$170,000 - $200,000 USD",
+            "all_locations": ["United Kingdom", "Ireland", "Portugal", "Spain"]}},
+        {"id": 0, "attributes": {
+            "ashby_id": "8c6883db-c84e-4c75-ae99-d72d4fbf7cad", "title": "Account Executive, Mid-Market | Norway ",
+            "location_name": "Sweden", "is_listed": True, "ashby_published_date": "2026-10-22T15:37:26.960Z"}},
+        {"id": 0, "attributes": {"ashby_id": "00000000-0000-0000-0000-000000000000", "title": "Hidden",
+                                 "is_listed": False}},
+    ]
+
+    def page(self, jobs):
+        # The real page splits its server-components payload over many
+        # self.__next_f.push chunks, each a JS string literal.
+        flight = '1:{"__component":"product.career-job-listing","jobs":' + json.dumps(jobs) + "}\n"
+        half = len(flight) // 2
+        return "".join(
+            '<script>self.__next_f.push([1,{}])</script>'.format(json.dumps(part))
+            for part in (flight[:half], flight[half:])
+        )
+
+    def test_parses_listed_roles_from_the_page(self):
+        postings = b.parse_deel(b._deel_jobs(self.page(self.JOBS)), "www.deel.com")
+        self.assertEqual([p.id for p in postings],
+                         ["adeab841-9916-4c21-973f-733f2d3377d2", "8c6883db-c84e-4c75-ae99-d72d4fbf7cad"])
+        self.assertEqual(postings[0].url,
+                         "https://www.deel.com/careers/job/adeab841-9916-4c21-973f-733f2d3377d2/")
+        self.assertEqual(postings[0].location, "United Kingdom; Ireland; Portugal; Spain")
+        self.assertEqual(postings[0].posted, "2026-07-24")
+        self.assertEqual(postings[1].location, "Sweden")
+        self.assertEqual(postings[1].title, "Account Executive, Mid-Market | Norway")
+
+    def test_fetch_reads_the_careers_page(self):
+        with mock.patch.object(b, "_request", return_value=self.page(self.JOBS)) as request:
+            postings = b.fetch_deel(w.Source("deel", "www.deel.com"), 5)
+        self.assertEqual(request.call_args[0][0], "https://www.deel.com/careers/")
+        self.assertEqual(len(postings), 2)
+
+    def test_a_page_without_the_job_list_is_an_adapter_error(self):
+        with mock.patch.object(b, "_request", return_value="<html></html>"):
+            with self.assertRaises(w.AdapterError):
+                b.fetch_deel(w.Source("deel", "www.deel.com"), 5)
+
+    def test_resolves_job_links(self):
+        for url in ("https://www.deel.com/careers/job/adeab841-9916-4c21-973f-733f2d3377d2/?source=linkedin",
+                    "https://jobs.deel.com/deel/job-details/adeab841-9916-4c21-973f-733f2d3377d2/application",
+                    "https://www.deel.com/careers/"):
+            self.assertEqual(str(w.resolve_url(url, fetch=False)), "deel:www.deel.com")
+        self.assertIsNone(b.resolve_deel("https://www.deel.com/pricing/"))
