@@ -2128,6 +2128,65 @@ class TestAshbyBoards(unittest.TestCase):
         with self.assertRaises(jobtrack_watch.AdapterError):
             jobtrack_watch.parse_ashby_board({"data": {"jobBoard": None}}, "nobody")
 
+    PT_FILTER = ["Portugal", "Lisbon", "Lisboa", "Porto"]
+
+    def test_secondary_locations_reach_the_location_filter(self):
+        postings = jobtrack_watch.parse_ashby(_fixture("ashby_secondary_locations.json"))
+        hits = [p.title for p in postings
+                if jobtrack_watch.matches(p.title, [], [], p.location_text, self.PT_FILTER)]
+        self.assertEqual(hits, ["Lead Deployment Strategist - EMEA", "Sr Security Engineer | Remote | Europe"])
+
+    def test_alerts_still_show_only_the_primary_location(self):
+        posting = jobtrack_watch.parse_ashby(_fixture("ashby_secondary_locations.json"))[0]
+        self.assertEqual(posting.location, "Berlin Office")
+        self.assertEqual(posting.other_locations, "Germany; Lisbon; Portugal; Amsterdam; Netherlands")
+        self.assertIn("(Berlin Office)", jobtrack_watch._posting_block(posting))
+        self.assertNotIn("Lisbon", jobtrack_watch._posting_block(posting))
+
+    def test_a_remote_workplace_matches_the_remote_filter(self):
+        postings = jobtrack_watch.parse_ashby(_fixture("ashby_secondary_locations.json"))
+        remote = [p.title for p in postings
+                  if jobtrack_watch.matches(p.title, [], [], p.location_text, ["Remote"])]
+        self.assertEqual(remote, ["Sr Security Engineer | Remote | Europe"])
+
+    def test_is_remote_alone_counts_as_remote(self):
+        postings = jobtrack_watch.parse_ashby({"jobs": [
+            {"id": "r1", "title": "PM", "location": "Berlin Office", "isRemote": True},
+        ]})
+        self.assertEqual(postings[0].other_locations, "Remote")
+
+    def test_malformed_secondary_locations_are_ignored(self):
+        postings = jobtrack_watch.parse_ashby({"jobs": [
+            {"id": "m1", "title": "PM", "location": "Berlin Office",
+             "secondaryLocations": [None, "Lisbon", {"location": 7}, {"address": "x"}], "address": []},
+        ]})
+        self.assertEqual(postings[0].location_text, "Berlin Office")
+
+    def test_board_query_secondary_locations_reach_the_filter(self):
+        board = {"data": {"jobBoard": {"jobPostings": [
+            {"id": "b1", "title": "Lead Deployment Strategist - EMEA", "locationName": "Berlin Office",
+             "workplaceType": "Hybrid", "secondaryLocations": [{"locationName": "Portugal"}]},
+            {"id": "b2", "title": "Accountant", "locationName": "Germany",
+             "workplaceType": "Remote", "secondaryLocations": []},
+        ]}}}
+        postings = jobtrack_watch.parse_ashby_board(board, "acme")
+        self.assertEqual(postings[0].location, "Berlin Office")
+        self.assertEqual(postings[0].location_text, "Berlin Office; Portugal")
+        self.assertEqual(postings[1].location_text, "Germany; Remote")
+        self.assertIn("secondaryLocations { locationName }", jobtrack_watch.ASHBY_BOARD_QUERY)
+
+    def test_poll_reports_a_role_open_in_portugal_only_as_a_secondary_location(self):
+        postings = jobtrack_watch.parse_ashby(_fixture("ashby_secondary_locations.json"))
+        state = {"ashby:acme": jobtrack_watch.SourceState(seen_ids=["old"], last_ok="2026-11-01")}
+        wl = jobtrack_watch.Watchlist(
+            defaults=jobtrack_watch.Filters(location=["Remote"]),
+            watches=[_watch(location=self.PT_FILTER)],
+        )
+        results = jobtrack_watch.poll(wl, state, datetime.date(2026, 11, 12),
+                                      fetch=lambda source, timeout=0: postings)
+        self.assertEqual([p.title for p in results[0].new],
+                         ["Lead Deployment Strategist - EMEA", "Sr Security Engineer | Remote | Europe"])
+
 
 class TestUnknownLocation(unittest.TestCase):
     def test_a_posting_without_a_location_is_not_hidden_by_the_location_filter(self):
