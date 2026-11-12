@@ -6,7 +6,7 @@ import { classifySuitability, candidateSummary, titleVerdict, isEngineeringTitle
 import { completeChat, type ChatMessage } from "../llm";
 import { langName, tr } from "../i18n";
 import { refreshProfileFromFeedback, loadProfile, loadCandidateProfile, seedScanTargets, normalizeRubric } from "../preferences";
-import { dedupeOpenings, prefilterOpenings, companyExcluded, companyFlagged } from "./prefilter";
+import { dedupeOpenings, prefilterOpenings, companyExcluded, companyFlagged, matchLocation } from "./prefilter";
 import { clearEngineOpenings, loadEngineOpenings } from "./engine";
 import { fetchAllSources, fetchAshby, fetchTeamtailor, remoteComOpening, remoteComJson, type ScanTarget } from "./sources";
 import {
@@ -39,7 +39,7 @@ function homeTerms(profile: PreferenceProfile): string[] {
 export function standardFlags(o: RawOpening, llm: string[], profile: PreferenceProfile): string[] {
   const out = [...llm];
   const has = (re: RegExp) => out.some((f) => re.test(f));
-  const loc = o.location.toLowerCase();
+  const loc = matchLocation(o).toLowerCase();
   const title = o.title.toLowerCase();
   const terms = homeTerms(profile);
   const home = homeLabel(profile);
@@ -113,7 +113,7 @@ function locationHints(text: string): string {
 
 /** Remote that clearly includes the candidate's home: global/anywhere, or a region/country from the profile. */
 function clearlyRemoteForHome(o: RawOpening, profile: PreferenceProfile): boolean {
-  const loc = o.location.toLowerCase();
+  const loc = matchLocation(o).toLowerCase();
   const text = o.description.toLowerCase();
   const terms = homeTerms(profile);
   const wide = (x: string) => /global|worldwide|anywhere/.test(x) || terms.some((t) => t.length > 1 && x.includes(t));
@@ -162,6 +162,7 @@ export async function scoreOpenings(
           company: o.company,
           title: o.title,
           location: o.location,
+          ...(o.locationText && o.locationText !== o.location ? { all_locations: o.locationText } : {}),
           flagged_company_type: companyFlagged(o.company, profile),
           excerpt: o.description.slice(0, 900),
           location_hints: locationHints(o.description),
