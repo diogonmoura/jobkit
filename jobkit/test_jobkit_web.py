@@ -111,6 +111,13 @@ class TestClient(unittest.TestCase):
         self.assertEqual(opener.requests[0][3], [{"external_key": "k", "company": "EDP", "user_id": USER}])
         self.assertEqual(opener.requests[0][2]["Prefer"], "resolution=merge-duplicates,return=minimal")
 
+    def test_upsert_openings_retries_a_timeout(self):
+        c, opener = client(socket.timeout(), None)
+        c.sleep = lambda _: None
+        c.upsert_openings(USER, [{"external_key": "k"}])
+        self.assertEqual(len(opener.requests), 2)
+        self.assertEqual(opener.requests[1][3], [{"external_key": "k", "user_id": USER}])
+
     def test_upsert_openings_skips_empty(self):
         c, opener = client()
         c.upsert_openings(USER, [])
@@ -235,6 +242,38 @@ class TestEngineClient(unittest.TestCase):
         c, opener = engine()
         c.upsert_openings(USER, [])
         self.assertEqual(opener.requests, [])
+
+    def test_upsert_openings_retries_a_timeout_or_5xx(self):
+        bad_gateway = urllib.error.HTTPError("u", 502, "x", {}, io.BytesIO(b"{}"))
+        c, opener = engine(socket.timeout(), bad_gateway, {"upserted": 1})
+        waits = []
+        c.sleep = waits.append
+        c.upsert_openings(USER, [{"external_key": "k", "company": "EDP"}])
+        self.assertEqual(len(opener.requests), 3)
+        self.assertEqual(opener.requests[0], opener.requests[2])
+        self.assertEqual(waits, list(web.RETRY_DELAYS))
+
+    def test_upsert_openings_gives_up_after_the_retries(self):
+        c, opener = engine(*[socket.timeout()] * (len(web.RETRY_DELAYS) + 1))
+        c.sleep = lambda _: None
+        with self.assertRaises(web.WebError) as ctx:
+            c.upsert_openings(USER, [{"external_key": "k"}])
+        self.assertEqual(str(ctx.exception), "timed out")
+        self.assertEqual(len(opener.requests), len(web.RETRY_DELAYS) + 1)
+
+    def test_upsert_openings_does_not_retry_a_4xx(self):
+        c, opener = engine(urllib.error.HTTPError("u", 401, "x", {}, io.BytesIO(b"{}")))
+        c.sleep = lambda _: self.fail("slept")
+        with self.assertRaises(web.WebError):
+            c.upsert_openings(USER, [{"external_key": "k"}])
+        self.assertEqual(len(opener.requests), 1)
+
+    def test_other_requests_are_not_retried(self):
+        c, opener = engine(socket.timeout())
+        c.sleep = lambda _: self.fail("slept")
+        with self.assertRaises(web.WebError):
+            c.insert_app(USER, "a", {})
+        self.assertEqual(len(opener.requests), 1)
 
     def test_errors_become_web_error_with_short_reason(self):
         unauthorized = urllib.error.HTTPError("u", 401, "x", {}, io.BytesIO(b'{"error":"unauthorized"}'))
