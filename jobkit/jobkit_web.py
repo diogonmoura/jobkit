@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime
 import json
 import socket
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,6 +29,9 @@ DbDocs = Dict[Key, Tuple[str, dict, Optional[str]]]
 WEB_ONLY_STATUSES = ("considering",)
 # Columns only the web app fills (a tailored CV, answers, the posting text, the scanned job).
 WEB_ONLY_COLUMNS = ("cv_md", "posting_text", "answers", "job_id")
+# Seconds to wait before each retry of a request that is safe to repeat (the openings upsert). A cold Worker
+# or a waking database can miss one 20-second timeout, and push-postings sends only after minutes of fetching.
+RETRY_DELAYS = (5, 20)
 
 
 class WebError(Exception):
@@ -120,6 +124,18 @@ class _Http:
     def __init__(self, opener=urllib.request.urlopen, timeout: int = 20):
         self.opener = opener
         self.timeout = timeout
+        self.sleep = time.sleep
+
+    def _retrying(self, call):
+        """call(), tried again after a timeout, a network error or a 5xx. Only for requests safe to repeat."""
+        for wait in RETRY_DELAYS:
+            try:
+                return call()
+            except WebError as error:
+                if error.status is not None and error.status < 500:
+                    raise
+                self.sleep(wait)
+        return call()
 
     def _http_error(self, status: int, detail: str) -> str:
         return "HTTP {}: {}".format(status, detail) if detail else "HTTP {}".format(status)
@@ -191,8 +207,9 @@ class Client(_Http):
     def upsert_openings(self, user_id: str, rows: List[dict]) -> None:
         if not rows:
             return
-        self._call("POST", "/jobkit_external_openings", [dict(row, user_id=user_id) for row in rows],
-                   prefer="resolution=merge-duplicates,return=minimal")
+        body = [dict(row, user_id=user_id) for row in rows]
+        self._retrying(lambda: self._call("POST", "/jobkit_external_openings", body,
+                                          prefer="resolution=merge-duplicates,return=minimal"))
 
 
 class EngineClient(_Http):
@@ -248,7 +265,7 @@ class EngineClient(_Http):
     def upsert_openings(self, user_id: str, rows: List[dict]) -> None:
         if not rows:
             return
-        self._call("POST", "/openings", {"rows": rows})
+        self._retrying(lambda: self._call("POST", "/openings", {"rows": rows}))
 
 
 def client_from_config(config: jobkit_config.Config, timeout: int = 20):
