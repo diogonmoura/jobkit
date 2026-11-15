@@ -7,8 +7,13 @@ function norm(s: string): string {
     .toLowerCase();
 }
 
+/** Location text to match on: every listed place when the source gives more than the displayed one. */
+export function matchLocation(o: RawOpening): string {
+  return o.locationText || o.location;
+}
+
 function haystack(o: RawOpening): string {
-  return norm(`${o.title} ${o.company} ${o.location} ${o.description}`);
+  return norm(`${o.title} ${o.company} ${matchLocation(o)} ${o.description}`);
 }
 
 const STOP = new Set(["and", "the", "of", "de", "e", "da", "do", "ai", "/", "&", "-", "(ai)", "manager", "lead", "senior", "staff", "head", "principal"]);
@@ -45,7 +50,7 @@ export function prefilterOpenings(
   for (const o of openings) {
     const title = norm(o.title);
     if (excludes.some((x) => new RegExp(`\\b${x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(title))) continue;
-    const loc = norm(o.location);
+    const loc = norm(matchLocation(o));
     const remoteOk =
       profile.remote &&
       /remote|remoto|anywhere|worldwide/.test(loc) &&
