@@ -1,0 +1,88 @@
+{
+ "jobPostings": [
+  {
+   "slug": "59bc799ad030cde37ee5b4e2",
+   "jobId": "d036f072-f434-4a93-90ee-68212abac2bd",
+   "unlisted": false,
+   "title": "Director, Talent Acquisition",
+   "location": "Canada",
+   "publishedAt": "2026-11-13T22:43:45.460Z",
+   "function": {
+    "id": "dd56e93e-8458-4cbb-a7d0-2ad110179fa8",
+    "name": "Recruiting & Talent Management"
+   },
+   "placementType": {
+    "id": "cbb7689a-c6c4-434b-8e34-a74dcea654f3",
+    "name": "Permanent",
+    "tag": "permanent"
+   },
+   "company": {
+    "id": "337eec61-227c-4df6-a4a5-431388b2bf90",
+    "name": "Teleperformance"
+   }
+  },
+  {
+   "slug": "4ed8ca3f8a98f943753e5415",
+   "jobId": "0fbcf4e4-65b4-4354-8bcf-29827bc0306b",
+   "unlisted": false,
+   "title": "Director, Training - Airlines",
+   "location": "Gurgaon, India",
+   "publishedAt": "2026-11-13T18:10:47.493Z",
+   "function": {
+    "id": "1513dfee-d1c0-4216-b71e-20d5f8669333",
+    "name": "Training"
+   },
+   "placementType": {
+    "id": "cbb7689a-c6c4-434b-8e34-a74dcea654f3",
+    "name": "Permanent",
+    "tag": "permanent"
+   },
+   "company": {
+    "id": "337eec61-227c-4df6-a4a5-431388b2bf90",
+    "name": "Teleperformance"
+   }
+  },
+  {
+   "slug": "80e4e33ad14211a618756759",
+   "jobId": "848ecbfe-760b-40c5-88ae-533ba9683d22",
+   "unlisted": false,
+   "title": "Director, Quality Assurance - HYD | Trust & Safety",
+   "location": "Hyderabad, India",
+   "publishedAt": "2026-11-13T17:55:57.560Z",
+   "function": {
+    "id": "e728c8b7-f376-4efc-bd79-1b0bb6711f9e",
+    "name": "Training and Quality"
+   },
+   "placementType": {
+    "id": "cbb7689a-c6c4-434b-8e34-a74dcea654f3",
+    "name": "Permanent",
+    "tag": "permanent"
+   },
+   "company": {
+    "id": "337eec61-227c-4df6-a4a5-431388b2bf90",
+    "name": "Teleperformance"
+   }
+  },
+  {
+   "slug": "0000000000000000000000ff",
+   "jobId": "d036f072-f434-4a93-90ee-68212abac2bd",
+   "unlisted": true,
+   "title": "Unlisted role",
+   "location": "Canada",
+   "publishedAt": "2026-11-13T22:43:45.460Z",
+   "function": {
+    "id": "dd56e93e-8458-4cbb-a7d0-2ad110179fa8",
+    "name": "Recruiting & Talent Management"
+   },
+   "placementType": {
+    "id": "cbb7689a-c6c4-434b-8e34-a74dcea654f3",
+    "name": "Permanent",
+    "tag": "permanent"
+   },
+   "company": {
+    "id": "337eec61-227c-4df6-a4a5-431388b2bf90",
+    "name": "Teleperformance"
+   }
+  }
+ ]
+}

@@ -256,15 +256,21 @@ def resolve_cornerstone(url: str) -> Optional[Source]:
 # --- JOIN (join.com company pages) ------------------------------------------------
 #
 # Slug: the company's join.com handle, e.g. "poseidon-commscom". The company
-# page embeds its open jobs in Next.js page data, paged by ?page=N.
+# page embeds its open jobs in Next.js page data, paged by ?page=N. The jobs
+# sit under pageProps.pageData (since November 2026); older pages held them in
+# pageProps.initialState, which is still read as a fallback.
 
 JOIN_MAX_PAGES = 30
 _JOIN_URL = re.compile(r"https?://(?:www\.)?join\.com/companies/([A-Za-z0-9_-]+)", re.IGNORECASE)
 
 
 def parse_join(page_data: dict, slug: str) -> Tuple[List[Posting], int]:
-    state = w._as_dict(w._as_dict(w._as_dict(page_data.get("props")).get("pageProps")).get("initialState"))
-    jobs = w._as_dict(state.get("jobs"))
+    props = w._as_dict(w._as_dict(page_data.get("props")).get("pageProps"))
+    jobs: dict = {}
+    for holder in ("pageData", "initialState"):
+        jobs = w._as_dict(w._as_dict(props.get(holder)).get("jobs"))
+        if "items" in jobs:
+            break
     if "items" not in jobs:
         raise AdapterError("join: page data has no jobs list")
     postings = []
@@ -421,63 +427,68 @@ def resolve_bendingspoons(url: str) -> Optional[Source]:
 
 # --- Mantu group career site (careers.mantu.com) ----------------------------------
 #
-# Slug: the brand's slug on careers.mantu.com, e.g. "mantu" or "amaris-consulting".
-# The site searches a Meilisearch index holding every brand's roles. Its
-# public search key, host and index name are read from the site's own script
-# bundle on each fetch, so a rotated key is picked up automatically.
+# Slug: the brand's filter value on careers.mantu.com, the same word its job
+# links carry, e.g. "mantu" in /brands/mantu/jobs/<title>-45456. The site's
+# job search (since November 2026) answers /jobs/results with JSON holding
+# server-rendered result cards, ten a page. Each card carries its id, title,
+# brand and location in a data-job-tracking attribute.
 
 MANTU_HOST = "careers.mantu.com"
-MANTU_MAX_HITS = 2000
+MANTU_MAX_PAGES = 100
+_MANTU_CARD = re.compile(r'<a\b[^>]*\bclass="m-cardJobOffer[^"]*"[^>]*>.*?</a>', re.S)
+_MANTU_BRAND = re.compile(r'name="brand\[\]"\s+value="([^"]+)"')
 
 
-def _mantu_search_config(timeout: int) -> Tuple[str, str, str]:
-    jobs_page = _request("https://{}/jobs".format(MANTU_HOST), timeout)
-    bundle = re.search(r'src="(https://careers\.mantu\.com/build/assets/app-[^"]+\.js)"', jobs_page)
-    if not bundle:
-        raise AdapterError("mantu: could not find the site's script bundle")
-    script = _request(bundle.group(1), timeout, max_bytes=10_000_000)
-    found = re.search(
-        r'indexName:"([^"]+)",searchClient:\w+\("(https://[^"]+)","([^"]+)"', script
-    )
-    if not found:
-        raise AdapterError("mantu: could not find the search settings in the site's script")
-    return found.group(2), found.group(3), found.group(1)
+def _mantu_attr(tag: str, name: str) -> str:
+    found = re.search(r'\b{}="([^"]*)"'.format(re.escape(name)), tag)
+    return html.unescape(found.group(1)) if found else ""
 
 
-def parse_mantu(payload, slug: str) -> List[Posting]:
+def parse_mantu(payload, slug: str) -> Tuple[List[Posting], int]:
+    page = w._as_dict(payload)
+    fragments = w._as_dict(page.get("html"))
+    if "results" not in fragments:
+        raise AdapterError("mantu: search response has no results")
+    brands = _MANTU_BRAND.findall(w._as_str(fragments.get("facets")))
+    if brands and slug not in brands:
+        raise AdapterError("mantu: no brand {!r} on {} (brands: {})".format(slug, MANTU_HOST, ", ".join(brands)))
     postings = []
-    for job in w._require_container(payload, "hits", "mantu"):
-        job = w._as_dict(job)
-        job_id = w._job_id(job.get("id"))
-        if not job_id or w._as_str(job.get("brand_slug")) != slug:
+    for card in _MANTU_CARD.findall(w._as_str(fragments.get("results"))):
+        opening = card[:card.index(">") + 1]
+        try:
+            tracking = w._as_dict(json.loads(_mantu_attr(opening, "data-job-tracking") or "{}"))
+        except ValueError:
+            tracking = {}
+        job_id = w._job_id(tracking.get("job_id"))
+        href = _mantu_attr(opening, "href")
+        if not job_id or not href or w._as_str(tracking.get("job_brand")) != slug:
             continue
-        places = []
-        for loc in w._as_list(job.get("locations")):
-            parts = [p.strip() for p in w._as_str(loc).split(">")]
-            if len(parts) == 2 and parts[0] != parts[1]:
-                places.append("{}, {}".format(parts[1], parts[0]))  # "Portugal > Lisbon"
-            elif parts and parts[0]:
-                places.append(parts[0])
-        published = w._as_str(job.get("web_published_date"))
+        published = re.search(r'<time[^>]*\bdatetime="([^"]+)"[^>]*\bdata-job-published', card)
         postings.append(Posting(
             id=job_id,
-            title=w._as_str(job.get("title")),
-            url="https://{}/brands/{}/jobs/{}".format(MANTU_HOST, slug, job_id),
-            location="; ".join(places),
-            posted=published[:10] or None,
+            title=w._as_str(tracking.get("job_title")).strip(),
+            url=urllib.parse.urljoin("https://{}/".format(MANTU_HOST), href),
+            location=w._as_str(tracking.get("job_location")),
+            posted=published.group(1)[:10] if published else None,
         ))
-    return postings
+    return postings, w._positive_int(page.get("pages"), default=1)
 
 
 def fetch_mantu(source: Source, timeout: int) -> List[Posting]:
-    host, key, index = _mantu_search_config(timeout)
-    payload = _post_json(
-        "{}/indexes/{}/search".format(host.rstrip("/"), index),
-        {"q": "", "limit": MANTU_MAX_HITS,
-         "attributesToRetrieve": ["id", "title", "locations", "brand_slug", "web_published_date"]},
-        timeout, {"Authorization": "Bearer " + key},
-    )
-    return w._parse_or_raise(parse_mantu, payload, source)
+    postings: List[Posting] = []
+    seen = set()
+    for number in range(1, MANTU_MAX_PAGES + 1):
+        url = "https://{}/jobs/results?{}".format(
+            MANTU_HOST, urllib.parse.urlencode({"brand[]": source.slug, "page": number})
+        )
+        payload = _json(_request(url, timeout, headers={"Accept": "application/json"}), url)
+        batch, pages = w._parse_or_raise(parse_mantu, payload, source)
+        fresh = [p for p in batch if p.id not in seen]
+        seen.update(p.id for p in fresh)
+        postings.extend(fresh)
+        if not fresh or number >= pages:
+            break
+    return postings
 
 
 def resolve_mantu(url: str) -> Optional[Source]:
@@ -617,39 +628,55 @@ def resolve_eightfold(url: str, page: str) -> Optional[Source]:
     return Source("eightfold", "{}/{}".format(parsed.netloc.lower(), domain.lower()))
 
 
-# --- ThriveApply (Thrive TRM's candidate site, <company>.thriveapp.ly) ----------
+# --- ThriveApply (Thrive TRM's candidate site) ------------------------------------
 #
-# Slug: the board's host, e.g. "teleperformance.thriveapp.ly". The single-page
-# app reads every open role from one public JSON endpoint, unpaged.
+# Slug: the board's host, e.g. "teleperformance.thrive-apply.thriveiq.com". The
+# single-page app reads every open role from one public JSON endpoint,
+# unpaged. In November 2026 Thrive moved boards from <company>.thriveapp.ly
+# (whose API now redirects to the staff sign-in) to
+# <company>.thrive-apply.thriveiq.com, with new posting ids; an old host slug
+# is read from the new host.
+
+THRIVE_LEGACY_SUFFIX = ".thriveapp.ly"
+THRIVE_SUFFIX = ".thrive-apply.thriveiq.com"
+
+
+def _thrive_host(host: str) -> str:
+    host = host.lower()
+    if host.endswith(THRIVE_LEGACY_SUFFIX):
+        return host[:-len(THRIVE_LEGACY_SUFFIX)] + THRIVE_SUFFIX
+    return host
+
 
 def parse_thriveapply(payload, slug: str) -> List[Posting]:
+    host = _thrive_host(slug)
     postings = []
-    for job in w._require_container(w._as_dict(payload), "job_listings", "thriveapply"):
+    for job in w._require_container(w._as_dict(payload), "jobPostings", "thriveapply"):
         job = w._as_dict(job)
-        job_id = w._job_id(job.get("id"))
-        if not job_id or job.get("published") is False:
+        job_id = w._as_str(job.get("slug")).strip()
+        if not job_id or job.get("unlisted"):
             continue
-        city, country = w._as_str(job.get("city")), w._as_str(job.get("country"))
-        location = ", ".join(p for p in (city, country) if p) or w._as_str(job.get("location"))
         postings.append(Posting(
             id=job_id,
-            title=w._as_str(job.get("job_title")).strip(),
-            url="https://{}/job/{}".format(slug, job_id),
-            location=location,
-            posted=w._as_str(job.get("published_date")) or None,
+            title=w._as_str(job.get("title")).strip(),
+            url="https://{}/{}".format(host, urllib.parse.quote(job_id)),
+            location=w._as_str(job.get("location")).strip(),
+            posted=w._as_str(job.get("publishedAt")) or None,
         ))
     return postings
 
 
 def fetch_thriveapply(source: Source, timeout: int) -> List[Posting]:
-    url = "https://{}/api/v1/job_listings".format(source.slug)
+    url = "https://{}/api/v1/public/job_postings".format(_thrive_host(source.slug))
     payload = _json(_request(url, timeout, headers={"Accept": "application/json"}), url)
     return w._parse_or_raise(parse_thriveapply, payload, source)
 
 
 def resolve_thriveapply(url: str) -> Optional[Source]:
     host = urllib.parse.urlparse(url).netloc.lower()
-    return Source("thriveapply", host) if host.endswith(".thriveapp.ly") else None
+    if host.endswith(THRIVE_LEGACY_SUFFIX) or host.endswith(THRIVE_SUFFIX):
+        return Source("thriveapply", _thrive_host(host))
+    return None
 
 
 # --- Deel (www.deel.com/careers) --------------------------------------------------
