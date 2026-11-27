@@ -109,5 +109,16 @@ export async function handleEngineApi(request: Request, env: Env, path: string, 
     return jsonResponse({ upserted: rows.length });
   }
 
+  if (route === "/following" && method === "PUT") {
+    const body = await readObject(request);
+    if (!body || !Array.isArray(body.companies) || !body.companies.every(isObject)) return bad("companies must be an array of objects");
+    const fields = allowedFields("jobkit_following", body, ["id", "updated_at"]);
+    if (typeof fields === "string") return bad(fields);
+    const row = { ...fields, id: "all", user_id: ownerId, updated_at: new Date().toISOString() };
+    const { error } = await store.from("jobkit_following").upsert(row, { onConflict: "user_id,id" });
+    if (error) return failed(error);
+    return jsonResponse({ saved: body.companies.length });
+  }
+
   return jsonResponse({ error: "Not found" }, { status: 404 });
 }
