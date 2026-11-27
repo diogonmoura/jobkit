@@ -200,6 +200,21 @@ class TestAvature(unittest.TestCase):
         )
         self.assertEqual(str(source), "avature:" + self.SLUG + "/29454=964546")
 
+    def test_resolve_keeps_the_list_filter_mode_with_a_filter(self):
+        source = w._resolve_from_html(
+            '<link href="/portal/avature.css">',
+            "https://jobs.siemens-energy.com/en_US/jobs/Jobs/?29454=964546&29454_format=11381"
+            "&listFilterMode=1&folderRecordsPerPage=20&",
+        )
+        self.assertEqual(str(source), "avature:" + self.SLUG + "/29454=964546&listFilterMode=1")
+
+    def test_resolve_ignores_the_list_filter_mode_on_its_own(self):
+        source = w._resolve_from_html(
+            '<link href="/portal/avature.css">',
+            "https://jobs.siemens-energy.com/en_US/jobs/Jobs?listFilterMode=1",
+        )
+        self.assertEqual(str(source), "avature:" + self.SLUG)
+
     def test_rejects_a_malformed_slug(self):
         with self.assertRaises(b.AdapterError):
             b.parse_avature("", "jobs.siemens-energy.com/en_US")

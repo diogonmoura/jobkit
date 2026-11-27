@@ -389,8 +389,12 @@ def resolve_avature(url: str, page: str) -> Optional[Source]:
         return None
     slug = "{}/{}/{}".format(parsed.netloc.lower(), segments[0], segments[1].lower())
     # Keep the portal's search filters (numeric field ids), not paging or role ids.
-    filters = [(k, v) for k, v in urllib.parse.parse_qsl(parsed.query) if k.isdigit() and v]
+    # listFilterMode goes with them: without it Siemens Energy leaves out the roles
+    # that list the filtered country as one of several locations.
+    query = urllib.parse.parse_qsl(parsed.query)
+    filters = [(k, v) for k, v in query if k.isdigit() and v]
     if filters:
+        filters += [(k, v) for k, v in query if k == "listFilterMode" and v]
         slug += "/" + urllib.parse.urlencode(filters)
     return Source("avature", slug)
 

@@ -212,9 +212,10 @@ Filters live in `watchlist.md`: global `- include:`, `- exclude:` and
 (comma-separated). A posting whose board reports no location always passes the
 location filter. Avature boards (e.g. Siemens Energy) report no location, so
 narrow them with the board's own search instead: run `watch add --url` with a
-filtered job list URL (e.g. `.../en_US/jobs/Jobs?29454=964546` for Portugal),
+filtered job list URL (e.g. `.../en_US/jobs/Jobs?29454=964546&listFilterMode=1` for Portugal; keep
+`listFilterMode=1` so roles with several locations are included),
 or append the query to the source, as in
-`avature:jobs.siemens-energy.com/en_US/jobs/29454=964546`. SuccessFactors boards often report `"<City>, <ISO2>"` (e.g.
+`avature:jobs.siemens-energy.com/en_US/jobs/29454=964546&listFilterMode=1`. SuccessFactors boards often report `"<City>, <ISO2>"` (e.g.
 `Lisbon, PT`); a leading comma cannot anchor a match because the column is
 comma-separated, so use the bare code (`PT`). RMK-style SuccessFactors boards
 use ISO3 codes (`PRT`), so give such a company its own Location.
