@@ -211,6 +211,11 @@ class Client(_Http):
         self._retrying(lambda: self._call("POST", "/jobkit_external_openings", body,
                                           prefer="resolution=merge-duplicates,return=minimal"))
 
+    def save_following(self, user_id: str, doc: dict) -> None:
+        body = dict(doc, user_id=user_id, id="all",
+                    updated_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
+        self._call("POST", "/jobkit_following", body, prefer="resolution=merge-duplicates,return=minimal")
+
 
 class EngineClient(_Http):
     """The same operations through the web app's /api/engine endpoints, for Supabase and Neon setups alike.
@@ -266,6 +271,9 @@ class EngineClient(_Http):
         if not rows:
             return
         self._retrying(lambda: self._call("POST", "/openings", {"rows": rows}))
+
+    def save_following(self, user_id: str, doc: dict) -> None:
+        self._call("PUT", "/following", doc)
 
 
 def client_from_config(config: jobkit_config.Config, timeout: int = 20):

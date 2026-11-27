@@ -8,10 +8,12 @@ import shutil
 import tempfile
 import unittest
 import urllib.error
+from unittest import mock
 
 import jobkit_web
 import jobtrack
 import jobtrack_sync as js
+import jobtrack_watch
 from jobkit_web import WebError
 
 USER = "u-1"
@@ -381,6 +383,48 @@ class SyncWebOverEngineTest(unittest.TestCase):
         self.assertNotIn("user_id", opener.requests[5][3])
         self.assertEqual(result["pushed"], 2)
         self.assertEqual(opener.answers, [])
+
+
+class PushFollowingTest(unittest.TestCase):
+    TODAY = datetime.date(2026, 9, 5)
+
+    def setUp(self):
+        self.t = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.t)
+        self.watchlist = os.path.join(self.t, "watchlist.md")
+        self.state = os.path.join(self.t, "state.json")
+        with open(self.watchlist, "w", encoding="utf-8") as handle:
+            handle.write("| Company | Source | Keywords | Location | Added |\n|---|---|---|---|---|\n"
+                         "| Acme | greenhouse:acme | — | — | 2026-09-01 |\n")
+        for name, path in (("default_watchlist_path", self.watchlist), ("default_state_path", self.state),
+                           ("default_follow_path", os.path.join(self.t, "follow.json"))):
+            patcher = mock.patch("jobtrack_watch." + name, return_value=path)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.client = mock.Mock()
+
+    def polled(self):
+        jobtrack_watch.save_state(self.state, {"greenhouse:acme": jobtrack_watch.SourceState(
+            seen_ids=["1", "2"], last_ok="2026-09-05")})
+
+    def test_sends_the_followed_companies(self):
+        self.polled()
+        js.push_following(self.client, USER, self.TODAY)
+        user, doc = self.client.save_following.call_args[0]
+        self.assertEqual((user, doc["updated"]), (USER, "2026-09-05"))
+        self.assertEqual([(r["company"], r["status"], r["tracked"]) for r in doc["companies"]],
+                         [("Acme", "watching", 2)])
+
+    def test_a_machine_without_watch_history_sends_nothing(self):
+        js.push_following(self.client, USER, self.TODAY)
+        self.client.save_following.assert_not_called()
+
+    def test_a_failed_upload_only_warns(self):
+        self.polled()
+        self.client.save_following.side_effect = WebError("HTTP 404")
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            js.push_following(self.client, USER, self.TODAY)
+        self.assertIn("Following list", err.getvalue())
 
 
 if __name__ == "__main__":

@@ -395,9 +395,35 @@ def run_web_sync(md_path: Optional[str] = None, timeout: int = 20) -> dict:
 
     config = jobkit_config.load()
     client = jobkit_web.client_from_config(config, timeout=timeout)
-    return sync_web(client, client.owner_id(), md_path or jobkit_paths.data_file("applications.md"),
-                    web_state_path(jobkit_config.sync_machine(config)),
-                    target=client.target, legacy_target=config.supabase_url or None)
+    user_id = client.owner_id()
+    result = sync_web(client, user_id, md_path or jobkit_paths.data_file("applications.md"),
+                      web_state_path(jobkit_config.sync_machine(config)),
+                      target=client.target, legacy_target=config.supabase_url or None)
+    push_following(client, user_id)
+    return result
+
+
+FOLLOWING_WARNING = "warning: could not update the web app's Following list ({})"
+
+
+def push_following(client, user_id: str, today: Optional[datetime.date] = None) -> None:
+    """Refresh the web app's Following list. Never raises: the applications are already synced.
+
+    Only a machine that has polled the boards writes it. One without watch history (a fresh checkout,
+    the daily GitHub Action) would overwrite the list with companies that look never checked.
+    """
+    import jobkit_web
+    import jobtrack_watch
+
+    try:
+        watch_state = jobtrack_watch.default_state_path()
+        if not any(entry.last_ok for entry in jobtrack_watch.load_state(watch_state).values()):
+            return
+        doc = build_following(jobtrack_watch.default_watchlist_path(), watch_state,
+                              jobtrack_watch.default_follow_path(), today or datetime.date.today())
+        client.save_following(user_id, doc)
+    except (OSError, ValueError, jobtrack.ParseError, jobkit_web.WebError) as error:
+        print(FOLLOWING_WARNING.format(error), file=sys.stderr)
 
 
 def auto_sync_web() -> bool:

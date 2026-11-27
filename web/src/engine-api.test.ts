@@ -142,4 +142,19 @@ describe("handleEngineApi", () => {
   it("answers 404 for unknown engine routes", async () => {
     assert.equal((await call("GET", "/engine/nothing")).status, 404);
   });
+
+  it("saves the followed companies as one document for the owner", async () => {
+    const doc = { updated: "2026-01-02", companies: [{ company: "Acme", status: "watching" }] };
+    assert.deepEqual(await (await call("PUT", "/engine/following", doc)).json(), { saved: 1 });
+    await call("PUT", "/engine/following", { updated: "2026-01-03", companies: [{ company: "Beta" }], user_id: U2 });
+    const rows = await run("select user_id, id, companies from jobkit_following", []);
+    assert.deepEqual(rows, [{ user_id: U1, id: "all", companies: [{ company: "Beta" }] }]);
+  });
+
+  it("rejects a following document without a company list or with unknown fields", async () => {
+    assert.equal((await call("PUT", "/engine/following", { updated: "2026-01-02" })).status, 400);
+    assert.equal((await call("PUT", "/engine/following", { companies: ["Acme"] })).status, 400);
+    assert.equal((await call("PUT", "/engine/following", { companies: [], bogus: 1 })).status, 400);
+  });
+
 });

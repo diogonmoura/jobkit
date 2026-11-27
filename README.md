@@ -226,6 +226,8 @@ no connector, the application is still added and the reason is printed. Every
 outcome is recorded in `.jobkit-follow.json`, keyed by posting URL, so each link
 is tried once. Applications added from the tracker dashboard are followed by
 `watch follow-postings`, which the sync runs.
+With the web backend, `sync web` also refreshes the web app's Following list
+from any machine that polls the boards.
 
 Notifications print to the console by default. For Telegram, set
 `[notify] channel = "telegram"` in `jobkit.toml`; the bot token is read at

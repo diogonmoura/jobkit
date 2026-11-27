@@ -52,6 +52,14 @@ class TestClient(unittest.TestCase):
         self.assertIn("/rest/v1/jobkit_instance?select=owner_user_id", opener.requests[0][1])
         self.assertEqual(opener.requests[0][2]["Apikey"], "sb_secret_k")
 
+    def test_save_following_upserts_the_one_document(self):
+        c, opener = client(None)
+        c.save_following(USER, {"updated": "2026-09-05", "companies": []})
+        method, url, headers, body = opener.requests[0]
+        self.assertEqual((method, url.split("/rest/v1")[1]), ("POST", "/jobkit_following"))
+        self.assertEqual((body["user_id"], body["id"], body["companies"]), (USER, "all", []))
+        self.assertIn("merge-duplicates", headers["Prefer"])
+
     def test_owner_id_missing_raises(self):
         c, _ = client([])
         with self.assertRaises(web.WebError) as ctx:
@@ -176,6 +184,13 @@ class TestEngineClient(unittest.TestCase):
         method, url, headers, body = opener.requests[0]
         self.assertEqual((method, url, body), ("GET", BASE + "/api/engine/owner", None))
         self.assertEqual(headers["Authorization"], "Bearer tok")
+
+    def test_save_following(self):
+        c, opener = engine({"saved": 0})
+        c.save_following(USER, {"updated": "2026-09-05", "companies": []})
+        method, url, _, body = opener.requests[0]
+        self.assertEqual((method, url), ("PUT", BASE + "/api/engine/following"))
+        self.assertEqual(body, {"updated": "2026-09-05", "companies": []})
 
     def test_trailing_slash_in_base_url(self):
         c, opener = engine({"ownerId": USER}, url=BASE + "/")
