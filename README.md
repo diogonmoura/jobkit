@@ -203,7 +203,7 @@ heading, title, entry line and bullet must appear once, in source order.
 `watch add --url URL` detects the board: `greenhouse`, `lever`, `lever-eu`,
 `ashby`, `smartrecruiters`, `successfactors`, `workday`, `taleo` (Business
 Edition), `teamtailor`, `oracle`, `cornerstone`, `join`, `avature`,
-`bendingspoons`, `mantu`, `itjobs`, `eightfold` and `thriveapply`. LinkedIn and sites that block automated
+`bendingspoons`, `mantu`, `itjobs`, `eightfold`, `thriveapply` and `deel`. LinkedIn and sites that block automated
 access are refused by name. For anything else, run `/jobkit:build-connector`.
 Current postings are seeded as seen, so only roles posted from now on alert.
 
