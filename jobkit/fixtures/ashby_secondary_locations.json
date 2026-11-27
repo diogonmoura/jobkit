@@ -1,0 +1,44 @@
+{
+  "apiVersion": "1",
+  "jobs": [
+    {
+      "id": "d1a6b6c0-0001-4000-8000-000000000001",
+      "title": "Lead Deployment Strategist - EMEA",
+      "location": "Berlin Office",
+      "secondaryLocations": [
+        {"location": "Lisbon", "address": {"postalAddress": {"addressLocality": "Lisbon", "addressCountry": "Portugal"}}},
+        {"location": "Amsterdam", "address": {"postalAddress": {"addressLocality": "Amsterdam", "addressCountry": "Netherlands"}}}
+      ],
+      "workplaceType": "Hybrid",
+      "isRemote": false,
+      "address": {"postalAddress": {"addressRegion": "Berlin-Brandenburg", "addressCountry": "Germany", "addressLocality": "Berlin"}},
+      "jobUrl": "https://jobs.ashbyhq.com/acme/d1a6b6c0-0001-4000-8000-000000000001",
+      "publishedAt": "2026-11-10T09:00:00.000+00:00"
+    },
+    {
+      "id": "d1a6b6c0-0002-4000-8000-000000000002",
+      "title": "Sr Security Engineer | Remote | Europe",
+      "location": "Berlin Office",
+      "secondaryLocations": [
+        {"location": "Portugal", "address": {"postalAddress": {"addressCountry": "Portugal"}}},
+        {"location": "Poland", "address": {"postalAddress": {"addressCountry": "Poland"}}}
+      ],
+      "workplaceType": "Remote",
+      "isRemote": true,
+      "address": {"postalAddress": {"addressCountry": "Germany", "addressLocality": "Berlin"}},
+      "jobUrl": "https://jobs.ashbyhq.com/acme/d1a6b6c0-0002-4000-8000-000000000002",
+      "publishedAt": "2026-11-09T09:00:00.000+00:00"
+    },
+    {
+      "id": "d1a6b6c0-0003-4000-8000-000000000003",
+      "title": "Office Manager",
+      "location": "Germany",
+      "secondaryLocations": [],
+      "workplaceType": "OnSite",
+      "isRemote": false,
+      "address": {"postalAddress": {"addressCountry": "Germany"}},
+      "jobUrl": "https://jobs.ashbyhq.com/acme/d1a6b6c0-0003-4000-8000-000000000003",
+      "publishedAt": "2026-11-08T09:00:00.000+00:00"
+    }
+  ]
+}
