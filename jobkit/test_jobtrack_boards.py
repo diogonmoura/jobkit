@@ -12,6 +12,14 @@ import jobtrack_boards
 import jobtrack_watch
 
 
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+
+def fixture(name: str) -> str:
+    with open(os.path.join(FIXTURES, name), encoding="utf-8") as handle:
+        return handle.read()
+
+
 def next_page(page_props: dict) -> str:
     return '<html><script id="__NEXT_DATA__" type="application/json">{}</script></html>'.format(
         json.dumps({"props": {"pageProps": page_props}})
@@ -126,6 +134,22 @@ class TestJoin(unittest.TestCase):
         self.assertEqual(
             postings[0].url, "https://join.com/companies/poseidon-commscom/16792192-chief-of-staff-m-f-d"
         )
+
+    def test_parses_the_live_page_data_layout(self):
+        # join.com moved the jobs from initialState to pageData in Nov 2026.
+        with mock.patch.object(b, "_request", return_value=fixture("join_company.html")) as get:
+            postings = b.fetch_join(w.Source("join", "poseidon-commscom"), 5)
+        self.assertEqual(get.call_count, 1)
+        self.assertEqual([p.id for p in postings], ["16522181"])
+        self.assertEqual(postings[0].title, "CHIEF OF STAFF (M/F/D)")
+        self.assertEqual(postings[0].location, "Lisbon, Portugal; Remote")
+        self.assertEqual(
+            postings[0].url, "https://join.com/companies/poseidon-commscom/16906949-chief-of-staff-m-f-d"
+        )
+
+    def test_page_data_without_a_jobs_list_is_an_adapter_error(self):
+        with self.assertRaises(w.AdapterError):
+            b.parse_join({"props": {"pageProps": {"pageData": {"mediaItems": {}}}}}, "poseidon-commscom")
 
     def test_fetch_stops_after_the_last_page(self):
         with mock.patch.object(b, "_request", return_value=next_page(self.STATE)) as get:
@@ -305,38 +329,52 @@ class TestBendingSpoons(unittest.TestCase):
 
 
 class TestMantu(unittest.TestCase):
-    PAYLOAD = {"hits": [
-        {"id": 45456, "title": "Global AI Lead [F/M/X]", "brand_slug": "mantu",
-         "locations": ["Portugal > Lisbon", "France > France"], "web_published_date": "2026-10-01 06:34:29"},
-        {"id": 45338, "title": "Test Engineer", "brand_slug": "amaris-consulting", "locations": []},
-    ]}
+    PAGE = json.loads(fixture("mantu_results_page1.json"))
 
-    def test_keeps_only_the_brand_and_formats_locations(self):
-        postings = b.parse_mantu(self.PAYLOAD, "mantu")
-        self.assertEqual([p.id for p in postings], ["45456"])
-        self.assertEqual(postings[0].location, "Lisbon, Portugal; France")
-        self.assertEqual(postings[0].posted, "2026-10-01")
-        self.assertEqual(postings[0].url, "https://careers.mantu.com/brands/mantu/jobs/45456")
+    def test_parses_the_result_cards(self):
+        postings, pages = b.parse_mantu(self.PAGE, "mantu")
+        self.assertEqual(pages, 2)
+        first = postings[0]
+        self.assertEqual(first.id, "45049")
+        self.assertEqual(first.title, "Tax Intern - French speaker / Internship [F/M/X]")
+        self.assertEqual(first.location, "Porto, Portugal")
+        self.assertEqual(first.posted, "2026-11-18")
+        self.assertEqual(
+            first.url, "https://careers.mantu.com/brands/mantu/jobs/tax-intern-french-speaker-internship-f-m-x-45049"
+        )
+        self.assertEqual(len(postings), 2)
 
-    def test_reads_the_search_settings_from_the_site_script(self):
-        pages = [
-            '<script src="https://careers.mantu.com/build/assets/app-1.js"></script>',
-            'x=Ml({indexName:"prod_index",searchClient:hs("https://search.example","abc123",{})})',
-        ]
-        with mock.patch.object(b, "_request", side_effect=pages):
-            self.assertEqual(b._mantu_search_config(5), ("https://search.example", "abc123", "prod_index"))
+    def test_skips_cards_of_another_brand(self):
+        postings, _ = b.parse_mantu(self.PAGE, "mantu")
+        page = json.loads(json.dumps(self.PAGE).replace("job_brand&quot;&#x3A;&quot;mantu", "job_brand&quot;&#x3A;&quot;amaris", 1))
+        self.assertEqual([p.id for p in b.parse_mantu(page, "mantu")[0]], [p.id for p in postings][1:])
 
-    def test_reads_a_search_key_that_is_not_plain_hex(self):
-        pages = [
-            '<script src="https://careers.mantu.com/build/assets/app-1.js"></script>',
-            'x=Ml({indexName:"prod_index",searchClient:hs("https://search.example","Mokk3a7f-X_9",{})})',
-        ]
-        with mock.patch.object(b, "_request", side_effect=pages):
-            self.assertEqual(b._mantu_search_config(5)[1], "Mokk3a7f-X_9")
+    def test_an_unknown_brand_is_an_adapter_error(self):
+        with self.assertRaises(w.AdapterError) as caught:
+            b.parse_mantu(self.PAGE, "amaris-consulting")
+        self.assertIn("amaris", str(caught.exception))
+
+    def test_a_response_without_results_is_an_adapter_error(self):
+        with self.assertRaises(w.AdapterError):
+            b.parse_mantu({"total": 0}, "mantu")
+
+    def test_fetch_pages_through_the_brand_filter(self):
+        last = dict(self.PAGE, page=2)
+        last["html"] = dict(self.PAGE["html"], results=self.PAGE["html"]["results"].replace("45049", "45050"))
+        with mock.patch.object(b, "_request", side_effect=[json.dumps(self.PAGE), json.dumps(last)]) as get:
+            postings = b.fetch_mantu(w.Source("mantu", "mantu"), 5)
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(
+            get.call_args_list[0][0][0], "https://careers.mantu.com/jobs/results?brand%5B%5D=mantu&page=1"
+        )
+        self.assertIn("&page=2", get.call_args_list[1][0][0])
+        self.assertEqual(len(postings), 3)
 
     def test_resolves_a_job_link(self):
-        source = w.resolve_url("https://careers.mantu.com/brands/mantu/jobs/45456", fetch=False)
-        self.assertEqual(str(source), "mantu:mantu")
+        for url in ("https://careers.mantu.com/brands/mantu/jobs/45456",
+                    "https://careers.mantu.com/brands/mantu/jobs/global-ai-lead-f-m-x-45456"):
+            self.assertEqual(str(w.resolve_url(url, fetch=False)), "mantu:mantu")
+
 
 
 ITJOBS_PAGE = """
@@ -429,40 +467,46 @@ if __name__ == "__main__":
 
 
 class TestThriveApply(unittest.TestCase):
-    SLUG = "teleperformance.thriveapp.ly"
-    PAYLOAD = {"job_listings": [
-        {"id": 577, "job_title": "Vice President, Global Procurement - Non-IT Category",
-         "location": "ES", "city": None, "country": "Spain", "published": True,
-         "published_date": "2026-11-06T15:34:17.527Z"},
-        {"id": 550, "job_title": "Director, Training & Quality - BFSI ", "location": "Taguig, PH",
-         "city": "Taguig", "country": "Philippines", "published": True,
-         "published_date": "2026-10-07T20:46:31.082Z"},
-        {"id": 1, "job_title": "Unpublished", "country": "Spain", "published": False},
-    ]}
+    SLUG = "teleperformance.thrive-apply.thriveiq.com"
+    PAYLOAD = json.loads(fixture("thriveapply_job_postings.json"))
 
-    def test_parses_published_roles(self):
+    def test_parses_listed_roles(self):
         postings = b.parse_thriveapply(self.PAYLOAD, self.SLUG)
-        self.assertEqual([p.id for p in postings], ["577", "550"])
-        self.assertEqual(postings[0].url, "https://teleperformance.thriveapp.ly/job/577")
-        self.assertEqual(postings[0].location, "Spain")
-        self.assertEqual(postings[1].location, "Taguig, Philippines")
-        self.assertEqual(postings[1].title, "Director, Training & Quality - BFSI")
-        self.assertEqual(postings[0].posted, "2026-11-06T15:34:17.527Z")
+        self.assertEqual(
+            [p.id for p in postings],
+            ["59bc799ad030cde37ee5b4e2", "4ed8ca3f8a98f943753e5415", "80e4e33ad14211a618756759"],
+        )
+        self.assertEqual(postings[0].title, "Director, Talent Acquisition")
+        self.assertEqual(postings[0].url, "https://teleperformance.thrive-apply.thriveiq.com/59bc799ad030cde37ee5b4e2")
+        self.assertEqual(postings[0].location, "Canada")
+        self.assertEqual(postings[0].posted, "2026-11-13T22:43:45.460Z")
+        self.assertEqual(postings[1].location, "Gurgaon, India")
 
-    def test_fetch_reads_the_listing_endpoint(self):
+    def test_fetch_reads_the_public_postings_endpoint(self):
         with mock.patch.object(b, "_request", return_value=json.dumps(self.PAYLOAD)) as request:
             postings = b.fetch_thriveapply(w.Source("thriveapply", self.SLUG), 5)
-        self.assertEqual(request.call_args[0][0], "https://teleperformance.thriveapp.ly/api/v1/job_listings")
-        self.assertEqual(len(postings), 2)
+        self.assertEqual(
+            request.call_args[0][0], "https://teleperformance.thrive-apply.thriveiq.com/api/v1/public/job_postings"
+        )
+        self.assertEqual(len(postings), 3)
 
-    def test_a_payload_without_listings_is_an_adapter_error(self):
+    def test_an_old_thriveapp_ly_slug_reads_the_new_host(self):
+        with mock.patch.object(b, "_request", return_value=json.dumps(self.PAYLOAD)) as request:
+            postings = b.fetch_thriveapply(w.Source("thriveapply", "teleperformance.thriveapp.ly"), 5)
+        self.assertEqual(
+            request.call_args[0][0], "https://teleperformance.thrive-apply.thriveiq.com/api/v1/public/job_postings"
+        )
+        self.assertTrue(postings[0].url.startswith("https://teleperformance.thrive-apply.thriveiq.com/"))
+
+    def test_a_payload_without_postings_is_an_adapter_error(self):
         with mock.patch.object(b, "_request", return_value="{}"):
             with self.assertRaises(w.AdapterError):
                 b.fetch_thriveapply(w.Source("thriveapply", self.SLUG), 5)
 
-    def test_resolves_a_job_link(self):
-        source = w.resolve_url("https://teleperformance.thriveapp.ly/job/576", fetch=False)
-        self.assertEqual(str(source), "thriveapply:" + self.SLUG)
+    def test_resolves_new_and_old_job_links_to_the_new_host(self):
+        for url in ("https://teleperformance.thrive-apply.thriveiq.com/c54ce7e53d8613123a4634fa",
+                    "https://teleperformance.thriveapp.ly/job/576"):
+            self.assertEqual(str(w.resolve_url(url, fetch=False)), "thriveapply:" + self.SLUG)
 
 
 class TestDeel(unittest.TestCase):
